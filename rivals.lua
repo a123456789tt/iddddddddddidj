@@ -1,2142 +1,348 @@
--- Инициализация сервисов
+-- Загрузка библиотек
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- Сервисы
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local Camera = Workspace.CurrentCamera
-local ContextActionService = game:GetService("ContextActionService")
+local Camera = workspace.CurrentCamera
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local MaterialService = game:GetService("MaterialService")
+local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
-
-if script:GetAttribute("Initialized") then return end
-script:SetAttribute("Initialized", true)
-
--- Создаём GUI для отображения статуса
-local statusGui = Instance.new("ScreenGui")
-statusGui.Name = "SpeedStatus"
-statusGui.ResetOnSpawn = false
-statusGui.Parent = player:WaitForChild("PlayerGui")
-
-local statusFrame = Instance.new("Frame")
-statusFrame.Size = UDim2.new(0, 250, 0, 80)
-statusFrame.Position = UDim2.new(0, 10, 0, 10)
-statusFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-statusFrame.BorderSizePixel = 2
-statusFrame.BorderColor3 = Color3.fromRGB(100, 150, 255)
-statusFrame.Parent = statusGui
-
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Parent = statusFrame
-statusLabel.Size = UDim2.new(1, 0, 1, 0)
-statusLabel.Text = "Инициализация..."
-statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-statusLabel.BackgroundTransparency = 1
-statusLabel.TextSize = 14
-
-local function updateStatus(text)
-    statusLabel.Text = text
-    print("[SpeedMenu] " .. text)
-end
-
--- Ожидание персонажа
-updateStatus("Ожидание персонажа...")
-local character = nil
-local humanoid = nil
-local startTime = tick()
-
-while not character and tick() - startTime < 10 do
-    character = player.Character
-    if character then
-        updateStatus("Персонаж найден")
-        break
-    end
-    task.wait(0.1)
-end
-
-if not character then
-    updateStatus("Ошибка: персонаж не найден")
-    return
-end
-
-startTime = tick()
-while not humanoid and tick() - startTime < 5 do
-    humanoid = character:FindFirstChild("Humanoid")
-    if humanoid then
-        updateStatus("Humanoid найден")
-        break
-    end
-    task.wait(0.1)
-end
-
-if not humanoid then
-    updateStatus("Ошибка: Humanoid не найден")
-    return
-end
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
 
 -- ==================== НАСТРОЙКИ ====================
 local Settings = {
-    -- Скорость ходьбы
-    minSpeed = 8,
-    maxSpeed = 120,
-    currentSpeed = 16,
-    
-    -- Скорость полёта (V1)
-    minFlySpeed = 20,
-    maxFlySpeed = 400,
-    currentFlySpeed = 60,
-    
-    -- Режимы полёта
-    flyMode = "V2",
-    flySpeedV2 = 60,
-    minFlySpeedV2 = 1,
-    maxFlySpeedV2 = 1000,
-    wPressed = false,
-    isFlying = false,
-    
-    -- BodyVelocity для скорости
+    -- Speed
     speedEnabled = true,
-    
-    -- Aimbot (общие настройки)
+    currentSpeed = 16,
+    -- Fly
+    flyMode = "V3",
+    flySpeedV2 = 60,
+    isFlying = false,
+    -- Aimbot
     aimbotEnabled = false,
-    minAimbotDist = 10,
-    maxAimbotDist = 1000,
     aimbotDistance = 300,
     aimbotSmoothness = 0.7,
     aimbotTargetPart = "Head",
-    aimbotIgnoreWalls = true,  -- ВСЕГДА ВКЛЮЧЕНО
+    aimbotIgnoreWalls = true,
     teamCheck = true,
-    
+    antiKatana = true,
+    aimbotOnRMB = false,
+    aimbotPriorityEnabled = false,
+    aimbotPriority = "Closest",
+    aimbotRandomPart = false,
+    aimbotHeadChance = 70,
+    aimbotStayOnTarget = true,
     -- Triggerbot
     triggerbotEnabled = false,
-    minTriggerDelay = 50,
-    maxTriggerDelay = 500,
     currentTriggerDelay = 150,
-    lastShotTime = 0,
-    rageMode = false,
-    
-    -- Дополнительные функции
+    -- Misc
     infJumpEnabled = false,
     infJumpPower = 50,
     noclipEnabled = false,
-    
     -- ESP
     espEnabled = false,
     espDistance = 1000,
-    
-    -- Устройство
+    espName = true,
+    espHealth = true,
+    -- Device
     devices = {"PC", "Phone", "Joystick", "VR"},
     deviceIndex = 1,
-    
-    -- Телепортация
+    -- Teleport
     tpEnabled = false,
     tpPosition = "Front",
     tpDistance = 2,
-    
-    -- Sniper Mode
-    sniperModeEnabled = false,
-    sniperModeWeapon = "AWM",
-    sniperModeRecoilStrength = 1.0,
-    
-    -- Energy Mode
-    energyModeEnabled = false,
-    energyWeapons = {"Energy Rifle", "Energy Pistols"},
-    
-    -- Shotgun Mode
+    -- Shotgun
     shotgunModeEnabled = false,
     shotgunTPDistance = 5,
     shotgunUpdateRate = 0.1,
-    
-    -- Good Mode (Alpha) - режим "лива"
-    goodModeEnabled = false,
-    goodModeInvisibleTime = 3,
-    goodModeVisibleTime = 0.1,
-    goodModeState = "visible",     -- текущее состояние
-    goodModeTimer = 0,
-    goodModeTimerRef = nil,
-    goodModeForceField = nil,
-
-    -- Быстрое меню
-    showActionMenu = true,          -- показывать ли быстрое меню
+    -- Dagger
+    daggerModeEnabled = false,
+    daggerParryKey = Enum.KeyCode.Q,
+    daggerParryDistance = 15,
+    -- Tracers
+    tracerEnabled = false,
+    tracerLength = 500,
+    tracerDuration = 0.5,
+    tracerColor = Color3.new(1, 0.5, 0),
+    tracerOrigin = "Head",
+    -- AutoRun
+    autoRunEnabled = false,
+    -- AutoLoad
+    autoLoadEnabled = false,
+    -- Rage Bot
+    rageBotEnabled = false,
+    rageAimbot = false,
+    rageTriggerbot = false,
+    rageWallPen = false,
+    rageShootDelay = 150,
+    rageHitPart = "Head",
+    rageSwitchOnEmpty = false,
+    -- No Recoil/Spread & Visuals
+    noRecoil = false,
+    noSpread = false,
+    noFlash = false,
+    noSmoke = false,
 }
 
--- Глобальные переменные
-local bodyVelocity = nil
-local speedController = nil
-local aimTarget = nil
-local aimbotConnection = nil
-local cameraConnection = nil
-local triggerbotConnection = nil
-local tpConnection = nil
-local espConnections = {}
-local espData = {}
-local espUpdateConnection = nil
-local originalCFrame = nil
-local compensationConnection = nil
-local isCompensating = false
-local lastShotgunUpdate = 0
-local frameSkip = 0  -- для ESP
+-- ==================== ЗАЩИТА ПОСЛЕ РЕСПАВНА (2 студии, 90 сек) ====================
+local protectedPlayers = {}
+local function isPlayerProtected(targetPlayer)
+    local untilTime = protectedPlayers[targetPlayer]
+    return untilTime and os.time() < untilTime
+end
 
--- Функция определения противника
+task.spawn(function()
+    while true do
+        task.wait(30)
+        local now = os.time()
+        for plr, t in pairs(protectedPlayers) do
+            if now >= t then protectedPlayers[plr] = nil end
+        end
+    end
+end)
+
+local function onPlayerRespawn(targetPlayer)
+    targetPlayer.CharacterAdded:Connect(function(newChar)
+        task.wait(0.5)
+        local myRoot = character and character:FindFirstChild("HumanoidRootPart")
+        local targetRoot = newChar:FindFirstChild("HumanoidRootPart")
+        if myRoot and targetRoot then
+            local dist = (targetRoot.Position - myRoot.Position).Magnitude
+            if dist <= 2 then
+                protectedPlayers[targetPlayer] = os.time() + 90
+                print("[Xeno] Защита " .. targetPlayer.Name .. " на 90 сек")
+            end
+        end
+    end)
+end
+for _, plr in ipairs(Players:GetPlayers()) do if plr ~= player then onPlayerRespawn(plr) end end
+Players.PlayerAdded:Connect(onPlayerRespawn)
+
+-- ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
+local function updateStatus(text) print("[Xeno] " .. text) end
 local function isEnemy(targetPlayer)
     if targetPlayer == player then return false end
+    if _G.XenoWhitelist and _G.XenoWhitelist[targetPlayer.Name] then return false end
+    if isPlayerProtected(targetPlayer) then return false end
     if not Settings.teamCheck then return true end
     local myTeam = player.Team
     local targetTeam = targetPlayer.Team
-    if myTeam and targetTeam then
-        return myTeam ~= targetTeam
-    else
-        return true
-    end
+    if myTeam and targetTeam then return myTeam ~= targetTeam else return true end
 end
 
-local function getCurrentWeapon()
-    if not character then return nil end
+local function canSee(targetPart)
+    local ignore = Settings.aimbotIgnoreWalls or (Settings.rageBotEnabled and Settings.rageWallPen)
+    if ignore then return true end
+    local origin = Camera.CFrame.Position
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {character, Camera}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    local result = Workspace:Raycast(origin, (targetPart.Position - origin).Unit * 1000, params)
+    if result and result.Instance then
+        local hitChar = result.Instance:FindFirstAncestorOfClass("Model")
+        if hitChar and hitChar:FindFirstChild("Humanoid") then return true end
+        return false
+    end
+    return true
+end
+
+-- No Recoil / No Spread
+local function applyNoRecoilSpread()
+    if not Settings.noRecoil and not Settings.noSpread then return end
     local tool = character:FindFirstChildOfClass("Tool")
-    return tool and tool.Name or nil
-end
-
--- ==================== GUI МЕНЮ ====================
-local function createGui()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "SpeedMenuXeno"
-    screenGui.ResetOnSpawn = false
-    screenGui.DisplayOrder = 100
-    screenGui.IgnoreGuiInset = true
-    screenGui.Parent = player:WaitForChild("PlayerGui")
-    updateStatus("GUI создан")
-
-    -- Кнопка открытия основного меню
-    local openButton = Instance.new("TextButton")
-    openButton.Parent = screenGui
-    openButton.Size = UDim2.new(0, 50, 0, 50)
-    openButton.Position = UDim2.new(0, 10, 1, -60)
-    openButton.Text = "≡"
-    openButton.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
-    openButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    openButton.Font = Enum.Font.GothamBold
-    openButton.TextSize = 30
-    openButton.BorderSizePixel = 0
-    local openCorner = Instance.new("UICorner")
-    openCorner.CornerRadius = UDim.new(0, 8)
-    openCorner.Parent = openButton
-
-    -- Кнопка быстрого меню (FS)
-    local fsButton = Instance.new("TextButton")
-    fsButton.Parent = screenGui
-    fsButton.Size = UDim2.new(0, 60, 0, 60)
-    fsButton.Position = UDim2.new(1, -70, 1, -70) -- правый нижний угол
-    fsButton.Text = "FS"
-    fsButton.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
-    fsButton.TextColor3 = Color3.fromRGB(0, 0, 0)
-    fsButton.Font = Enum.Font.GothamBold
-    fsButton.TextSize = 20
-    fsButton.BorderSizePixel = 0
-    fsButton.Visible = Settings.showActionMenu
-    local fsCorner = Instance.new("UICorner")
-    fsCorner.CornerRadius = UDim.new(0, 8)
-    fsCorner.Parent = fsButton
-    local fsGradient = Instance.new("UIGradient")
-    fsGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0,0,0))})
-    fsGradient.Rotation = 45
-    fsGradient.Parent = fsButton
-
-    -- Само быстрое меню (изначально скрыто)
-    local actionFrame = Instance.new("Frame")
-    actionFrame.Parent = screenGui
-    actionFrame.Size = UDim2.new(0, 200, 0, 250)
-    actionFrame.Position = UDim2.new(1, -220, 0.73, 0)  -- 73% сверху, справа с отступом
-    actionFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    actionFrame.BorderSizePixel = 2
-    actionFrame.BorderColor3 = Color3.fromRGB(255, 200, 0)
-    actionFrame.Visible = false
-    local actionCorner = Instance.new("UICorner")
-    actionCorner.CornerRadius = UDim.new(0, 10)
-    actionCorner.Parent = actionFrame
-    local actionGradient = Instance.new("UIGradient")
-    actionGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0,0,0))})
-    actionGradient.Rotation = 45
-    actionGradient.Parent = actionFrame
-
-    -- Заголовок
-    local actionTitle = Instance.new("TextLabel")
-    actionTitle.Parent = actionFrame
-    actionTitle.Size = UDim2.new(1, 0, 0, 30)
-    actionTitle.Text = "Quick Menu"
-    actionTitle.TextColor3 = Color3.fromRGB(255,255,255)
-    actionTitle.BackgroundTransparency = 1
-    actionTitle.Font = Enum.Font.GothamBold
-
-    -- Кнопка Aimbot (чёрно-оранжевый)
-    local actionAimbot = Instance.new("TextButton")
-    actionAimbot.Parent = actionFrame
-    actionAimbot.Size = UDim2.new(0.8, 0, 0, 30)
-    actionAimbot.Position = UDim2.new(0.1, 0, 0.12, 0)
-    actionAimbot.Text = "Aimbot"
-    actionAimbot.TextColor3 = Color3.fromRGB(255,255,255)
-    actionAimbot.Font = Enum.Font.GothamBold
-    actionAimbot.TextSize = 14
-    actionAimbot.BorderSizePixel = 0
-    local aimBtnCorner = Instance.new("UICorner")
-    aimBtnCorner.CornerRadius = UDim.new(0, 8)
-    aimBtnCorner.Parent = actionAimbot
-    local aimBtnGradient = Instance.new("UIGradient")
-    aimBtnGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(255,100,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0,0,0))})
-    aimBtnGradient.Rotation = 45
-    aimBtnGradient.Parent = actionAimbot
-
-    -- Кнопка Shotgun Mode (красно-чёрный)
-    local actionShotgun = Instance.new("TextButton")
-    actionShotgun.Parent = actionFrame
-    actionShotgun.Size = UDim2.new(0.8, 0, 0, 30)
-    actionShotgun.Position = UDim2.new(0.1, 0, 0.28, 0)
-    actionShotgun.Text = "Shotgun"
-    actionShotgun.TextColor3 = Color3.fromRGB(255,255,255)
-    actionShotgun.Font = Enum.Font.GothamBold
-    actionShotgun.TextSize = 14
-    actionShotgun.BorderSizePixel = 0
-    local shotCorner = Instance.new("UICorner")
-    shotCorner.CornerRadius = UDim.new(0, 8)
-    shotCorner.Parent = actionShotgun
-    local shotGradient = Instance.new("UIGradient")
-    shotGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0,0,0))})
-    shotGradient.Rotation = 45
-    shotGradient.Parent = actionShotgun
-
-    -- Кнопка Energy Mode (сине-чёрный)
-    local actionEnergy = Instance.new("TextButton")
-    actionEnergy.Parent = actionFrame
-    actionEnergy.Size = UDim2.new(0.8, 0, 0, 30)
-    actionEnergy.Position = UDim2.new(0.1, 0, 0.44, 0)
-    actionEnergy.Text = "Energy"
-    actionEnergy.TextColor3 = Color3.fromRGB(255,255,255)
-    actionEnergy.Font = Enum.Font.GothamBold
-    actionEnergy.TextSize = 14
-    actionEnergy.BorderSizePixel = 0
-    local enCorner = Instance.new("UICorner")
-    enCorner.CornerRadius = UDim.new(0, 8)
-    enCorner.Parent = actionEnergy
-    local enGradient = Instance.new("UIGradient")
-    enGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0,0,255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0,0,0))})
-    enGradient.Rotation = 45
-    enGradient.Parent = actionEnergy
-
-    -- Кнопка Sniper Mode (фиолетово-чёрный)
-    local actionSniper = Instance.new("TextButton")
-    actionSniper.Parent = actionFrame
-    actionSniper.Size = UDim2.new(0.8, 0, 0, 30)
-    actionSniper.Position = UDim2.new(0.1, 0, 0.60, 0)
-    actionSniper.Text = "Sniper"
-    actionSniper.TextColor3 = Color3.fromRGB(255,255,255)
-    actionSniper.Font = Enum.Font.GothamBold
-    actionSniper.TextSize = 14
-    actionSniper.BorderSizePixel = 0
-    local snCorner = Instance.new("UICorner")
-    snCorner.CornerRadius = UDim.new(0, 8)
-    snCorner.Parent = actionSniper
-    local snGradient = Instance.new("UIGradient")
-    snGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(150,0,255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0,0,0))})
-    snGradient.Rotation = 45
-    snGradient.Parent = actionSniper
-
-    -- Кнопка Fly V2 (зелёно-тёмно-зелёный)
-    local actionFlyV2 = Instance.new("TextButton")
-    actionFlyV2.Parent = actionFrame
-    actionFlyV2.Size = UDim2.new(0.8, 0, 0, 30)
-    actionFlyV2.Position = UDim2.new(0.1, 0, 0.76, 0)
-    actionFlyV2.Text = "Fly V2"
-    actionFlyV2.TextColor3 = Color3.fromRGB(255,255,255)
-    actionFlyV2.Font = Enum.Font.GothamBold
-    actionFlyV2.TextSize = 14
-    actionFlyV2.BorderSizePixel = 0
-    local flyCorner = Instance.new("UICorner")
-    flyCorner.CornerRadius = UDim.new(0, 8)
-    flyCorner.Parent = actionFlyV2
-    local flyGradient = Instance.new("UIGradient")
-    flyGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0,255,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0,50,0))})
-    flyGradient.Rotation = 45
-    flyGradient.Parent = actionFlyV2
-
-    -- Кнопка закрытия быстрого меню (маленькая)
-    local actionClose = Instance.new("TextButton")
-    actionClose.Parent = actionFrame
-    actionClose.Size = UDim2.new(0.2, 0, 0, 20)
-    actionClose.Position = UDim2.new(0.8, -10, 0.02, 0)
-    actionClose.Text = "X"
-    actionClose.BackgroundColor3 = Color3.fromRGB(200,50,50)
-    actionClose.TextColor3 = Color3.fromRGB(255,255,255)
-    actionClose.Font = Enum.Font.GothamBold
-    actionClose.TextSize = 12
-    actionClose.BorderSizePixel = 0
-    local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, 4)
-    closeCorner.Parent = actionClose
-    actionClose.MouseButton1Click:Connect(function()
-        actionFrame.Visible = false
-    end)
-
-    -- Обработчик нажатия на кнопку FS
-    fsButton.MouseButton1Click:Connect(function()
-        actionFrame.Visible = not actionFrame.Visible
-    end)
-
-    local isMobile = not UserInputService.KeyboardEnabled and UserInputService.TouchEnabled
-    local menuSize = isMobile and UDim2.new(0, 350, 0, 700) or UDim2.new(0, 400, 0, 900)
-    local menuPos = isMobile and UDim2.new(0.5, -175, 0.5, -350) or UDim2.new(0.5, -200, 0.5, -450)
-
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Size = menuSize
-    mainFrame.Position = menuPos
-    mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    mainFrame.BorderSizePixel = 0
-    mainFrame.Visible = false
-    mainFrame.Parent = screenGui
-    local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 10)
-    mainCorner.Parent = mainFrame
-
-    openButton.MouseButton1Click:Connect(function()
-        mainFrame.Visible = not mainFrame.Visible
-        updateStatus(mainFrame.Visible and "Меню открыто" or "Меню закрыто")
-    end)
-
-    -- Подменю телепортации
-    local tpMenu = Instance.new("Frame")
-    tpMenu.Size = UDim2.new(0, 280, 0, 280)
-    tpMenu.Position = UDim2.new(0.5, -140, 0.5, -140)
-    tpMenu.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    tpMenu.BorderSizePixel = 2
-    tpMenu.BorderColor3 = Color3.fromRGB(100, 150, 255)
-    tpMenu.Visible = false
-    tpMenu.Parent = screenGui
-    local tpCorner = Instance.new("UICorner")
-    tpCorner.CornerRadius = UDim.new(0, 10)
-    tpCorner.Parent = tpMenu
-    local tpGradient = Instance.new("UIGradient")
-    tpGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0,100,255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(150,0,255))})
-    tpGradient.Rotation = 45
-    tpGradient.Parent = tpMenu
-
-    -- Подменю аимбота
-    local aimSettingsMenu = Instance.new("Frame")
-    aimSettingsMenu.Size = UDim2.new(0, 300, 0, 400)
-    aimSettingsMenu.Position = UDim2.new(0.5, -150, 0.5, -200)
-    aimSettingsMenu.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    aimSettingsMenu.BorderSizePixel = 2
-    aimSettingsMenu.BorderColor3 = Color3.fromRGB(255, 150, 100)
-    aimSettingsMenu.Visible = false
-    aimSettingsMenu.Parent = screenGui
-    local aimCorner = Instance.new("UICorner")
-    aimCorner.CornerRadius = UDim.new(0, 10)
-    aimCorner.Parent = aimSettingsMenu
-    local aimGradient = Instance.new("UIGradient")
-    aimGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(255,100,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255,255,0))})
-    aimGradient.Rotation = 45
-    aimGradient.Parent = aimSettingsMenu
-
-    -- Подменю Fly Settings
-    local flySettingsMenu = Instance.new("Frame")
-    flySettingsMenu.Size = UDim2.new(0, 280, 0, 200)
-    flySettingsMenu.Position = UDim2.new(0.5, -140, 0.5, -100)
-    flySettingsMenu.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    flySettingsMenu.BorderSizePixel = 2
-    flySettingsMenu.BorderColor3 = Color3.fromRGB(100, 200, 255)
-    flySettingsMenu.Visible = false
-    flySettingsMenu.Parent = screenGui
-    local flyCorner = Instance.new("UICorner")
-    flyCorner.CornerRadius = UDim.new(0, 10)
-    flyCorner.Parent = flySettingsMenu
-    local flyGradient = Instance.new("UIGradient")
-    flyGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0,255,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0,200,255))})
-    flyGradient.Rotation = 45
-    flyGradient.Parent = flySettingsMenu
-
-    -- Заголовок Fly Settings
-    local flyTitle = Instance.new("TextLabel")
-    flyTitle.Parent = flySettingsMenu
-    flyTitle.Size = UDim2.new(1, 0, 0, 30)
-    flyTitle.Text = "Fly Settings"
-    flyTitle.TextColor3 = Color3.fromRGB(255,255,255)
-    flyTitle.BackgroundTransparency = 1
-    flyTitle.Font = Enum.Font.GothamBold
-
-    -- Режимы полёта
-    local modeContainer = Instance.new("Frame")
-    modeContainer.Parent = flySettingsMenu
-    modeContainer.Size = UDim2.new(1, -20, 0, 40)
-    modeContainer.Position = UDim2.new(0, 10, 0, 40)
-    modeContainer.BackgroundTransparency = 1
-
-    local v1Button = Instance.new("TextButton")
-    v1Button.Parent = modeContainer
-    v1Button.Size = UDim2.new(0.4, 0, 1, 0)
-    v1Button.Position = UDim2.new(0.05, 0, 0, 0)
-    v1Button.Text = "V1"
-    v1Button.BackgroundColor3 = (Settings.flyMode == "V1") and Color3.fromRGB(50,150,50) or Color3.fromRGB(80,80,80)
-    v1Button.TextColor3 = Color3.fromRGB(255,255,255)
-    v1Button.Font = Enum.Font.GothamBold
-    v1Button.BorderSizePixel = 0
-    local v1Corner = Instance.new("UICorner")
-    v1Corner.CornerRadius = UDim.new(0, 8)
-    v1Corner.Parent = v1Button
-
-    local v2Button = Instance.new("TextButton")
-    v2Button.Parent = modeContainer
-    v2Button.Size = UDim2.new(0.4, 0, 1, 0)
-    v2Button.Position = UDim2.new(0.55, 0, 0, 0)
-    v2Button.Text = "V2"
-    v2Button.BackgroundColor3 = (Settings.flyMode == "V2") and Color3.fromRGB(50,150,50) or Color3.fromRGB(80,80,80)
-    v2Button.TextColor3 = Color3.fromRGB(255,255,255)
-    v2Button.Font = Enum.Font.GothamBold
-    v2Button.BorderSizePixel = 0
-    local v2Corner = Instance.new("UICorner")
-    v2Corner.CornerRadius = UDim.new(0, 8)
-    v2Corner.Parent = v2Button
-
-    v1Button.MouseButton1Click:Connect(function()
-        Settings.flyMode = "V1"
-        v1Button.BackgroundColor3 = Color3.fromRGB(50,150,50)
-        v2Button.BackgroundColor3 = Color3.fromRGB(80,80,80)
-        updateStatus("Fly mode: V1")
-    end)
-
-    v2Button.MouseButton1Click:Connect(function()
-        Settings.flyMode = "V2"
-        v2Button.BackgroundColor3 = Color3.fromRGB(50,150,50)
-        v1Button.BackgroundColor3 = Color3.fromRGB(80,80,80)
-        updateStatus("Fly mode: V2")
-    end)
-
-    -- Ползунок V2
-    local flySpeedV2Label = Instance.new("TextLabel")
-    flySpeedV2Label.Parent = flySettingsMenu
-    flySpeedV2Label.Size = UDim2.new(1, 0, 0, 20)
-    flySpeedV2Label.Position = UDim2.new(0, 0, 0, 90)
-    flySpeedV2Label.Text = "V2 Speed: " .. Settings.flySpeedV2
-    flySpeedV2Label.TextColor3 = Color3.fromRGB(200,200,200)
-    flySpeedV2Label.BackgroundTransparency = 1
-    flySpeedV2Label.Font = Enum.Font.Gotham
-
-    local v2SliderContainer = Instance.new("Frame")
-    v2SliderContainer.Parent = flySettingsMenu
-    v2SliderContainer.Size = UDim2.new(0.8, 0, 0, 15)
-    v2SliderContainer.Position = UDim2.new(0.1, 0, 0, 115)
-    v2SliderContainer.BackgroundColor3 = Color3.fromRGB(60,60,60)
-
-    local v2SliderBar = Instance.new("Frame")
-    v2SliderBar.Parent = v2SliderContainer
-    v2SliderBar.Size = UDim2.new(1, -2, 1, -2)
-    v2SliderBar.Position = UDim2.new(0, 1, 0, 1)
-    v2SliderBar.BackgroundColor3 = Color3.fromRGB(80,80,80)
-
-    local v2Thumb = Instance.new("TextButton")
-    v2Thumb.Parent = v2SliderBar
-    v2Thumb.Size = UDim2.new(0, 12, 0, 12)
-    v2Thumb.BackgroundColor3 = Color3.fromRGB(120, 255, 120)
-    v2Thumb.BorderSizePixel = 0
-    v2Thumb.Text = ""
-
-    local flyCloseBtn = Instance.new("TextButton")
-    flyCloseBtn.Parent = flySettingsMenu
-    flyCloseBtn.Size = UDim2.new(0.4, 0, 0, 30)
-    flyCloseBtn.Position = UDim2.new(0.3, 0, 0, 160)
-    flyCloseBtn.Text = "Close"
-    flyCloseBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
-    flyCloseBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    flyCloseBtn.Font = Enum.Font.GothamBold
-    flyCloseBtn.BorderSizePixel = 0
-    local flyCloseCorner = Instance.new("UICorner")
-    flyCloseCorner.CornerRadius = UDim.new(0, 8)
-    flyCloseCorner.Parent = flyCloseBtn
-    flyCloseBtn.MouseButton1Click:Connect(function() flySettingsMenu.Visible = false end)
-
-    -- Функция перетаскивания
-    local function makeDraggable(frame)
-        local dragging = false
-        local dragStart
-        frame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = true
-                dragStart = input.Position - frame.AbsolutePosition
+    if tool then
+        local weaponScript = tool:FindFirstChild("WeaponScript") or tool:FindFirstChild("Client")
+        if weaponScript then
+            if Settings.noRecoil then
+                weaponScript:SetAttribute("RecoilMultiplier", 0)
+                weaponScript:SetAttribute("RecoilEnabled", false)
             end
-        end)
-        frame.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = false
+            if Settings.noSpread then
+                weaponScript:SetAttribute("SpreadMultiplier", 0)
+                weaponScript:SetAttribute("SpreadEnabled", false)
             end
-        end)
-        frame.InputChanged:Connect(function(input)
-            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                frame.Position = UDim2.new(0, input.Position.X - dragStart.X, 0, input.Position.Y - dragStart.Y)
-            end
-        end)
+        end
     end
+end
+RunService.Heartbeat:Connect(applyNoRecoilSpread)
 
-    makeDraggable(mainFrame)
-    makeDraggable(tpMenu)
-    makeDraggable(aimSettingsMenu)
-    makeDraggable(flySettingsMenu)
-
-    -- ========== ЭЛЕМЕНТЫ ОСНОВНОГО МЕНЮ ==========
-    local title = Instance.new("TextLabel")
-    title.Parent = mainFrame
-    title.Size = UDim2.new(1, 0, 0, 40)
-    title.Text = "Меню Xeno + Rivals v1.1.5"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = isMobile and 14 or 16
-    title.BackgroundTransparency = 1
-
-    -- Скорость ходьбы
-    local speedLabel = Instance.new("TextLabel")
-    speedLabel.Parent = mainFrame
-    speedLabel.Size = UDim2.new(1, 0, 0, 30)
-    speedLabel.Position = UDim2.new(0, 0, 0.03, 0)
-    speedLabel.Text = "Скорость ходьбы: " .. Settings.currentSpeed
-    speedLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-    speedLabel.BackgroundTransparency = 1
-    speedLabel.TextSize = isMobile and 12 or 14
-
-    local sliderContainer = Instance.new("Frame")
-    sliderContainer.Parent = mainFrame
-    sliderContainer.Size = UDim2.new(0.8, 0, 0, 15)
-    sliderContainer.Position = UDim2.new(0.1, 0, 0.06, 0)
-    sliderContainer.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-
-    local sliderBar = Instance.new("Frame")
-    sliderBar.Parent = sliderContainer
-    sliderBar.Size = UDim2.new(1, -2, 1, -2)
-    sliderBar.Position = UDim2.new(0, 1, 0, 1)
-    sliderBar.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-
-    local thumb = Instance.new("TextButton")
-    thumb.Parent = sliderBar
-    thumb.Size = UDim2.new(0, 12, 0, 12)
-    thumb.BackgroundColor3 = Color3.fromRGB(120, 180, 255)
-    thumb.BorderSizePixel = 0
-    thumb.Text = ""
-
-    -- Скорость V1
-    local flySpeedLabel = Instance.new("TextLabel")
-    flySpeedLabel.Parent = mainFrame
-    flySpeedLabel.Size = UDim2.new(1, 0, 0, 30)
-    flySpeedLabel.Position = UDim2.new(0, 0, 0.09, 0)
-    flySpeedLabel.Text = "Скорость V1: " .. Settings.currentFlySpeed
-    flySpeedLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-    flySpeedLabel.BackgroundTransparency = 1
-    flySpeedLabel.TextSize = isMobile and 12 or 14
-
-    local flySliderContainer = Instance.new("Frame")
-    flySliderContainer.Parent = mainFrame
-    flySliderContainer.Size = UDim2.new(0.8, 0, 0, 15)
-    flySliderContainer.Position = UDim2.new(0.1, 0, 0.12, 0)
-    flySliderContainer.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-
-    local flySliderBar = Instance.new("Frame")
-    flySliderBar.Parent = flySliderContainer
-    flySliderBar.Size = UDim2.new(1, -2, 1, -2)
-    flySliderBar.Position = UDim2.new(0, 1, 0, 1)
-    flySliderBar.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-
-    local flyThumb = Instance.new("TextButton")
-    flyThumb.Parent = flySliderBar
-    flyThumb.Size = UDim2.new(0, 12, 0, 12)
-    flyThumb.BackgroundColor3 = Color3.fromRGB(255, 120, 120)
-    flyThumb.BorderSizePixel = 0
-    flyThumb.Text = ""
-
-    -- ESP Distance
-    local espDistLabel = Instance.new("TextLabel")
-    espDistLabel.Parent = mainFrame
-    espDistLabel.Size = UDim2.new(1, 0, 0, 30)
-    espDistLabel.Position = UDim2.new(0, 0, 0.15, 0)
-    espDistLabel.Text = "ESP Distance: " .. Settings.espDistance
-    espDistLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-    espDistLabel.BackgroundTransparency = 1
-    espDistLabel.TextSize = isMobile and 12 or 14
-
-    local espDistSliderContainer = Instance.new("Frame")
-    espDistSliderContainer.Parent = mainFrame
-    espDistSliderContainer.Size = UDim2.new(0.8, 0, 0, 15)
-    espDistSliderContainer.Position = UDim2.new(0.1, 0, 0.18, 0)
-    espDistSliderContainer.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-
-    local espDistSliderBar = Instance.new("Frame")
-    espDistSliderBar.Parent = espDistSliderContainer
-    espDistSliderBar.Size = UDim2.new(1, -2, 1, -2)
-    espDistSliderBar.Position = UDim2.new(0, 1, 0, 1)
-    espDistSliderBar.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-
-    local espDistThumb = Instance.new("TextButton")
-    espDistThumb.Parent = espDistSliderBar
-    espDistThumb.Size = UDim2.new(0, 12, 0, 12)
-    espDistThumb.BackgroundColor3 = Color3.fromRGB(255, 200, 100)
-    espDistThumb.BorderSizePixel = 0
-    espDistThumb.Text = ""
-
-    -- Кнопки
-    local flyToggleButton = Instance.new("TextButton")
-    flyToggleButton.Parent = mainFrame
-    flyToggleButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    flyToggleButton.Position = UDim2.new(0.05, 0, 0.21, 0)
-    flyToggleButton.Text = "Полёт: ВЫКЛ"
-    flyToggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    flyToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    flyToggleButton.BorderSizePixel = 0
-    flyToggleButton.TextSize = isMobile and 10 or 14
-
-    local infJumpButton = Instance.new("TextButton")
-    infJumpButton.Parent = mainFrame
-    infJumpButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    infJumpButton.Position = UDim2.new(0.55, 0, 0.21, 0)
-    infJumpButton.Text = "Inf Jump: ВЫКЛ"
-    infJumpButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    infJumpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    infJumpButton.BorderSizePixel = 0
-    infJumpButton.TextSize = isMobile and 10 or 14
-
-    local flySettingsButton = Instance.new("TextButton")
-    flySettingsButton.Parent = mainFrame
-    flySettingsButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    flySettingsButton.Position = UDim2.new(0.05, 0, 0.27, 0)
-    flySettingsButton.Text = "Fly Settings"
-    flySettingsButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    flySettingsButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    flySettingsButton.Font = Enum.Font.GothamBold
-    flySettingsButton.BorderSizePixel = 0
-    flySettingsButton.TextSize = isMobile and 10 or 14
-    flySettingsButton.MouseButton1Click:Connect(function() flySettingsMenu.Visible = true end)
-
-    local speedToggleButton = Instance.new("TextButton")
-    speedToggleButton.Parent = mainFrame
-    speedToggleButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    speedToggleButton.Position = UDim2.new(0.55, 0, 0.27, 0)
-    speedToggleButton.Text = "Speed: ВКЛ"
-    speedToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-    speedToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    speedToggleButton.BorderSizePixel = 0
-    speedToggleButton.TextSize = isMobile and 10 or 14
-
-    local noclipButton = Instance.new("TextButton")
-    noclipButton.Parent = mainFrame
-    noclipButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    noclipButton.Position = UDim2.new(0.05, 0, 0.33, 0)
-    noclipButton.Text = "Noclip: ВЫКЛ"
-    noclipButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-    noclipButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    noclipButton.BorderSizePixel = 0
-    noclipButton.TextSize = isMobile and 10 or 14
-
-    local espButton = Instance.new("TextButton")
-    espButton.Parent = mainFrame
-    espButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    espButton.Position = UDim2.new(0.55, 0, 0.33, 0)
-    espButton.Text = "ESP: ВЫКЛ"
-    espButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-    espButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    espButton.BorderSizePixel = 0
-    espButton.TextSize = isMobile and 10 or 14
-
-    local tpMenuButton = Instance.new("TextButton")
-    tpMenuButton.Parent = mainFrame
-    tpMenuButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    tpMenuButton.Position = UDim2.new(0.05, 0, 0.39, 0)
-    tpMenuButton.Text = "TP Menu"
-    tpMenuButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    tpMenuButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    tpMenuButton.BorderSizePixel = 0
-    tpMenuButton.TextSize = isMobile and 10 or 14
-
-    local aimSettingsButton = Instance.new("TextButton")
-    aimSettingsButton.Parent = mainFrame
-    aimSettingsButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    aimSettingsButton.Position = UDim2.new(0.55, 0, 0.39, 0)
-    aimSettingsButton.Text = "Aim Settings"
-    aimSettingsButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    aimSettingsButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    aimSettingsButton.BorderSizePixel = 0
-    aimSettingsButton.TextSize = isMobile and 10 or 14
-
-    -- Energy Mode
-    local energyContainer = Instance.new("Frame")
-    energyContainer.Parent = mainFrame
-    energyContainer.Size = UDim2.new(0.8, 0, 0, 30)
-    energyContainer.Position = UDim2.new(0.1, 0, 0.43, 0)
-    energyContainer.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    energyContainer.BackgroundTransparency = 0.3
-    local energyCorner = Instance.new("UICorner")
-    energyCorner.CornerRadius = UDim.new(0, 8)
-    energyCorner.Parent = energyContainer
-
-    local energyLabel = Instance.new("TextLabel")
-    energyLabel.Parent = energyContainer
-    energyLabel.Size = UDim2.new(1, 0, 1, 0)
-    energyLabel.Text = "ENERGY MODE: OFF"
-    energyLabel.TextColor3 = Color3.fromRGB(255,255,255)
-    energyLabel.BackgroundTransparency = 1
-    energyLabel.Font = Enum.Font.GothamBold
-    energyLabel.TextSize = isMobile and 10 or 14
-    local energyGradient = Instance.new("UIGradient")
-    energyGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0,0,255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,0))})
-    energyGradient.Rotation = 45
-    energyGradient.Parent = energyLabel
-
-    local energyButton = Instance.new("TextButton")
-    energyButton.Parent = energyContainer
-    energyButton.Size = UDim2.new(1, 0, 1, 0)
-    energyButton.Text = ""
-    energyButton.BackgroundTransparency = 1
-    energyButton.BorderSizePixel = 0
-    energyButton.MouseButton1Click:Connect(function()
-        Settings.energyModeEnabled = not Settings.energyModeEnabled
-        energyLabel.Text = "ENERGY MODE: " .. (Settings.energyModeEnabled and "ON" or "OFF")
-        updateStatus("Energy Mode " .. (Settings.energyModeEnabled and "включён" or "выключен"))
-    end)
-
-    -- Sniper Mode
-    local sniperMainContainer = Instance.new("Frame")
-    sniperMainContainer.Parent = mainFrame
-    sniperMainContainer.Size = UDim2.new(0.8, 0, 0, 30)
-    sniperMainContainer.Position = UDim2.new(0.1, 0, 0.47, 0)
-    sniperMainContainer.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    sniperMainContainer.BackgroundTransparency = 0.3
-    local sniperMainCorner = Instance.new("UICorner")
-    sniperMainCorner.CornerRadius = UDim.new(0, 8)
-    sniperMainCorner.Parent = sniperMainContainer
-
-    local sniperMainLabel = Instance.new("TextLabel")
-    sniperMainLabel.Parent = sniperMainContainer
-    sniperMainLabel.Size = UDim2.new(1, 0, 1, 0)
-    sniperMainLabel.Text = "SNIPER MODE: OFF"
-    sniperMainLabel.TextColor3 = Color3.fromRGB(255,255,255)
-    sniperMainLabel.BackgroundTransparency = 1
-    sniperMainLabel.Font = Enum.Font.GothamBold
-    sniperMainLabel.TextSize = isMobile and 10 or 14
-    local sniperMainGradient = Instance.new("UIGradient")
-    sniperMainGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0,255,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(150,0,255))})
-    sniperMainGradient.Rotation = 45
-    sniperMainGradient.Parent = sniperMainLabel
-
-    local sniperMainButton = Instance.new("TextButton")
-    sniperMainButton.Parent = sniperMainContainer
-    sniperMainButton.Size = UDim2.new(1, 0, 1, 0)
-    sniperMainButton.Text = ""
-    sniperMainButton.BackgroundTransparency = 1
-    sniperMainButton.BorderSizePixel = 0
-    sniperMainButton.MouseButton1Click:Connect(function()
-        Settings.sniperModeEnabled = not Settings.sniperModeEnabled
-        sniperMainLabel.Text = "SNIPER MODE: " .. (Settings.sniperModeEnabled and "ON" or "OFF")
-        updateStatus("Sniper Mode " .. (Settings.sniperModeEnabled and "включён" or "выключен"))
-    end)
-
-    -- Shotgun Mode
-    local shotgunContainer = Instance.new("Frame")
-    shotgunContainer.Parent = mainFrame
-    shotgunContainer.Size = UDim2.new(0.8, 0, 0, 30)
-    shotgunContainer.Position = UDim2.new(0.1, 0, 0.51, 0)
-    shotgunContainer.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    shotgunContainer.BackgroundTransparency = 0.3
-    local shotgunCorner = Instance.new("UICorner")
-    shotgunCorner.CornerRadius = UDim.new(0, 8)
-    shotgunCorner.Parent = shotgunContainer
-
-    local shotgunLabel = Instance.new("TextLabel")
-    shotgunLabel.Parent = shotgunContainer
-    shotgunLabel.Size = UDim2.new(1, 0, 1, 0)
-    shotgunLabel.Text = "SHOTGUN MODE: OFF"
-    shotgunLabel.TextColor3 = Color3.fromRGB(255,255,255)
-    shotgunLabel.BackgroundTransparency = 1
-    shotgunLabel.Font = Enum.Font.GothamBold
-    shotgunLabel.TextSize = isMobile and 10 or 14
-    local shotgunGradient = Instance.new("UIGradient")
-    shotgunGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255,100,0))})
-    shotgunGradient.Rotation = 45
-    shotgunGradient.Parent = shotgunLabel
-
-    local shotgunButton = Instance.new("TextButton")
-    shotgunButton.Parent = shotgunContainer
-    shotgunButton.Size = UDim2.new(1, 0, 1, 0)
-    shotgunButton.Text = ""
-    shotgunButton.BackgroundTransparency = 1
-    shotgunButton.BorderSizePixel = 0
-    shotgunButton.MouseButton1Click:Connect(function()
-        Settings.shotgunModeEnabled = not Settings.shotgunModeEnabled
-        shotgunLabel.Text = "SHOTGUN MODE: " .. (Settings.shotgunModeEnabled and "ON" or "OFF")
-        updateStatus("Shotgun Mode " .. (Settings.shotgunModeEnabled and "включён" or "выключен"))
-    end)
-
-    -- Good Mode (Liva)
-    local goodModeContainer = Instance.new("Frame")
-    goodModeContainer.Parent = mainFrame
-    goodModeContainer.Size = UDim2.new(0.8, 0, 0, 30)
-    goodModeContainer.Position = UDim2.new(0.1, 0, 0.55, 0)
-    goodModeContainer.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    goodModeContainer.BackgroundTransparency = 0.3
-    local goodModeCorner = Instance.new("UICorner")
-    goodModeCorner.CornerRadius = UDim.new(0, 8)
-    goodModeCorner.Parent = goodModeContainer
-
-    local goodModeLabel = Instance.new("TextLabel")
-    goodModeLabel.Parent = goodModeContainer
-    goodModeLabel.Size = UDim2.new(1, 0, 1, 0)
-    goodModeLabel.Text = "GOOD MODE (LIVA): OFF"
-    goodModeLabel.TextColor3 = Color3.fromRGB(255,255,255)
-    goodModeLabel.BackgroundTransparency = 1
-    goodModeLabel.Font = Enum.Font.GothamBold
-    goodModeLabel.TextSize = isMobile and 10 or 14
-    local goodModeGradient = Instance.new("UIGradient")
-    goodModeGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0,255,0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255,255,255))})
-    goodModeGradient.Rotation = 45
-    goodModeGradient.Parent = goodModeLabel
-
-    local goodModeButton = Instance.new("TextButton")
-    goodModeButton.Parent = goodModeContainer
-    goodModeButton.Size = UDim2.new(1, 0, 1, 0)
-    goodModeButton.Text = ""
-    goodModeButton.BackgroundTransparency = 1
-    goodModeButton.BorderSizePixel = 0
-
-    goodModeButton.MouseButton1Click:Connect(function()
-        Settings.goodModeEnabled = not Settings.goodModeEnabled
-        if Settings.goodModeEnabled then
-            goodModeLabel.Text = "GOOD MODE (LIVA): ON"
-            Settings.goodModeTimer = 0
-            Settings.goodModeState = "invisible"
-            Settings.goodModeTimerRef = tick()
-            -- Сразу делаем невидимым
-            if character then
-                for _, v in ipairs(character:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        v.Transparency = 1
-                    end
-                end
-                if not Settings.goodModeForceField then
-                    local ff = Instance.new("ForceField")
-                    ff.Name = "GoodModeForceField"
-                    ff.Visible = false
-                    ff.Parent = character
-                    Settings.goodModeForceField = ff
-                end
+-- No Flash / No Smoke
+local function removeFlashSmoke()
+    if Settings.noFlash then
+        for _, v in ipairs(Workspace:GetDescendants()) do
+            if v.Name:lower():find("flash") or v.Name:lower():find("flashbang") then
+                v:Destroy()
             end
-            updateStatus("Good Mode активирован (цикл лива)")
+        end
+    end
+    if Settings.noSmoke then
+        for _, v in ipairs(Workspace:GetDescendants()) do
+            if v.Name:lower():find("smoke") then
+                v:Destroy()
+            end
+        end
+    end
+end
+RunService.Heartbeat:Connect(removeFlashSmoke)
+
+-- ==================== AIMBOT ====================
+local aimTarget = nil
+local aimbotConnection, cameraConnection
+local function getTargetPart(char)
+    if Settings.rageBotEnabled then
+        local part = Settings.rageHitPart == "Head" and char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+        if part then return part end
+    end
+    if Settings.aimbotRandomPart then
+        local rand = math.random(1, 100)
+        if rand <= Settings.aimbotHeadChance then
+            return char:FindFirstChild("Head")
         else
-            goodModeLabel.Text = "GOOD MODE (LIVA): OFF"
-            -- Возвращаем видимость и убираем ForceField
-            if character then
-                for _, v in ipairs(character:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        v.Transparency = 0
-                    end
-                end
-                if Settings.goodModeForceField then
-                    Settings.goodModeForceField:Destroy()
-                    Settings.goodModeForceField = nil
-                end
-            end
-            Settings.goodModeTimerRef = nil
-            updateStatus("Good Mode деактивирован")
-        end
-    end)
-
-    -- Устройство
-    local deviceLabel = Instance.new("TextLabel")
-    deviceLabel.Parent = mainFrame
-    deviceLabel.Size = UDim2.new(0.6, 0, 0.04, 0)
-    deviceLabel.Position = UDim2.new(0.2, 0, 0.60, 0)
-    deviceLabel.Text = "Device: PC"
-    deviceLabel.TextColor3 = Color3.fromRGB(200,200,200)
-    deviceLabel.BackgroundTransparency = 1
-    deviceLabel.TextSize = isMobile and 10 or 14
-
-    local devicePrevButton = Instance.new("TextButton")
-    devicePrevButton.Parent = mainFrame
-    devicePrevButton.Size = UDim2.new(0.1, 0, 0.04, 0)
-    devicePrevButton.Position = UDim2.new(0.1, 0, 0.60, 0)
-    devicePrevButton.Text = "<"
-    devicePrevButton.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    devicePrevButton.TextColor3 = Color3.fromRGB(255,255,255)
-    devicePrevButton.BorderSizePixel = 0
-    devicePrevButton.TextSize = isMobile and 10 or 14
-
-    local deviceNextButton = Instance.new("TextButton")
-    deviceNextButton.Parent = mainFrame
-    deviceNextButton.Size = UDim2.new(0.1, 0, 0.04, 0)
-    deviceNextButton.Position = UDim2.new(0.8, 0, 0.60, 0)
-    deviceNextButton.Text = ">"
-    deviceNextButton.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    deviceNextButton.TextColor3 = Color3.fromRGB(255,255,255)
-    deviceNextButton.BorderSizePixel = 0
-    deviceNextButton.TextSize = isMobile and 10 or 14
-
-    -- Статусы
-    local aimbotStatusLabel = Instance.new("TextLabel")
-    aimbotStatusLabel.Parent = mainFrame
-    aimbotStatusLabel.Size = UDim2.new(1, 0, 0, 30)
-    aimbotStatusLabel.Position = UDim2.new(0, 0, 0.64, 0)
-    aimbotStatusLabel.Text = "Aimbot: не активен | Цель: нет"
-    aimbotStatusLabel.TextColor3 = Color3.fromRGB(180,180,180)
-    aimbotStatusLabel.BackgroundTransparency = 1
-    aimbotStatusLabel.TextSize = isMobile and 10 or 12
-
-    local triggerStatusLabel = Instance.new("TextLabel")
-    triggerStatusLabel.Parent = mainFrame
-    triggerStatusLabel.Size = UDim2.new(1, 0, 0, 30)
-    triggerStatusLabel.Position = UDim2.new(0, 0, 0.67, 0)
-    triggerStatusLabel.Text = "Trigger: не активен | Цель: нет"
-    triggerStatusLabel.TextColor3 = Color3.fromRGB(180,180,180)
-    triggerStatusLabel.BackgroundTransparency = 1
-    triggerStatusLabel.TextSize = isMobile and 10 or 12
-
-    local closeButton = Instance.new("TextButton")
-    closeButton.Parent = mainFrame
-    closeButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    closeButton.Position = UDim2.new(0.3, 0, 0.71, 0)
-    closeButton.Text = "Закрыть"
-    closeButton.BackgroundColor3 = Color3.fromRGB(200,50,50)
-    closeButton.TextColor3 = Color3.fromRGB(255,255,255)
-    closeButton.BorderSizePixel = 0
-    closeButton.TextSize = isMobile and 10 or 14
-
-    -- Кнопка переключения быстрого меню
-    local actionToggleButton = Instance.new("TextButton")
-    actionToggleButton.Parent = mainFrame
-    actionToggleButton.Size = UDim2.new(0.4, 0, 0.05, 0)
-    actionToggleButton.Position = UDim2.new(0.3, 0, 0.76, 0) -- под closeButton
-    actionToggleButton.Text = "Action Menu: ON"
-    actionToggleButton.BackgroundColor3 = Color3.fromRGB(50,150,50)
-    actionToggleButton.TextColor3 = Color3.fromRGB(255,255,255)
-    actionToggleButton.Font = Enum.Font.GothamBold
-    actionToggleButton.BorderSizePixel = 0
-    actionToggleButton.TextSize = isMobile and 10 or 14
-
-    actionToggleButton.MouseButton1Click:Connect(function()
-        Settings.showActionMenu = not Settings.showActionMenu
-        fsButton.Visible = Settings.showActionMenu
-        if not Settings.showActionMenu then
-            actionFrame.Visible = false
-        end
-        actionToggleButton.Text = "Action Menu: " .. (Settings.showActionMenu and "ON" or "OFF")
-        actionToggleButton.BackgroundColor3 = Settings.showActionMenu and Color3.fromRGB(50,150,50) or Color3.fromRGB(150,50,50)
-    end)
-
-    local helpLabel = Instance.new("TextLabel")
-    helpLabel.Parent = mainFrame
-    helpLabel.Size = UDim2.new(0.9, 0, 0.08, 0)
-    helpLabel.Position = UDim2.new(0.05, 0, 0.82, 0) -- смещаем ниже из-за новой кнопки
-    helpLabel.Text = "R-меню | F-Aimbot | T-Trigger | Пробел-прыжок | Speed-вкл/выкл | P-экстренно"
-    helpLabel.TextColor3 = Color3.fromRGB(180,180,180)
-    helpLabel.BackgroundTransparency = 1
-    helpLabel.TextSize = isMobile and 8 or 10
-    helpLabel.TextWrapped = true
-
-    -- ========== ПОДМЕНЮ ТЕЛЕПОРТАЦИИ ==========
-    local tpTitle = Instance.new("TextLabel")
-    tpTitle.Parent = tpMenu
-    tpTitle.Size = UDim2.new(1, 0, 0, 30)
-    tpTitle.Text = "Auto Teleport"
-    tpTitle.TextColor3 = Color3.fromRGB(255,255,255)
-    tpTitle.BackgroundTransparency = 1
-    tpTitle.Font = Enum.Font.GothamBold
-
-    local tpToggleButton = Instance.new("TextButton")
-    tpToggleButton.Parent = tpMenu
-    tpToggleButton.Size = UDim2.new(0.8, 0, 0.12, 0)
-    tpToggleButton.Position = UDim2.new(0.1, 0, 0.12, 0)
-    tpToggleButton.Text = "Auto TP: ВЫКЛ"
-    tpToggleButton.BackgroundColor3 = Color3.fromRGB(150,50,50)
-    tpToggleButton.TextColor3 = Color3.fromRGB(255,255,255)
-    tpToggleButton.BorderSizePixel = 0
-    local tpBtnCorner = Instance.new("UICorner")
-    tpBtnCorner.CornerRadius = UDim.new(0, 8)
-    tpBtnCorner.Parent = tpToggleButton
-
-    local tpDistLabel = Instance.new("TextLabel")
-    tpDistLabel.Parent = tpMenu
-    tpDistLabel.Size = UDim2.new(1, 0, 0, 20)
-    tpDistLabel.Position = UDim2.new(0, 0, 0.25, 0)
-    tpDistLabel.Text = "TP Distance: " .. Settings.tpDistance
-    tpDistLabel.TextColor3 = Color3.fromRGB(200,200,200)
-    tpDistLabel.BackgroundTransparency = 1
-
-    local tpDistSliderContainer = Instance.new("Frame")
-    tpDistSliderContainer.Parent = tpMenu
-    tpDistSliderContainer.Size = UDim2.new(0.8, 0, 0, 15)
-    tpDistSliderContainer.Position = UDim2.new(0.1, 0, 0.30, 0)
-    tpDistSliderContainer.BackgroundColor3 = Color3.fromRGB(60,60,60)
-
-    local tpDistSliderBar = Instance.new("Frame")
-    tpDistSliderBar.Parent = tpDistSliderContainer
-    tpDistSliderBar.Size = UDim2.new(1, -2, 1, -2)
-    tpDistSliderBar.Position = UDim2.new(0, 1, 0, 1)
-    tpDistSliderBar.BackgroundColor3 = Color3.fromRGB(80,80,80)
-
-    local tpDistThumb = Instance.new("TextButton")
-    tpDistThumb.Parent = tpDistSliderBar
-    tpDistThumb.Size = UDim2.new(0, 12, 0, 12)
-    tpDistThumb.BackgroundColor3 = Color3.fromRGB(100,200,255)
-    tpDistThumb.BorderSizePixel = 0
-    tpDistThumb.Text = ""
-
-    local tpPosLabel = Instance.new("TextLabel")
-    tpPosLabel.Parent = tpMenu
-    tpPosLabel.Size = UDim2.new(1, 0, 0, 20)
-    tpPosLabel.Position = UDim2.new(0, 0, 0.35, 0)
-    tpPosLabel.Text = "Position: " .. Settings.tpPosition
-    tpPosLabel.TextColor3 = Color3.fromRGB(200,200,200)
-    tpPosLabel.BackgroundTransparency = 1
-
-    local tpFrontBtn = Instance.new("TextButton")
-    tpFrontBtn.Parent = tpMenu
-    tpFrontBtn.Size = UDim2.new(0.4, 0, 0.1, 0)
-    tpFrontBtn.Position = UDim2.new(0.05, 0, 0.42, 0)
-    tpFrontBtn.Text = "Front"
-    tpFrontBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    tpFrontBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    tpFrontBtn.BorderSizePixel = 0
-
-    local tpBackBtn = Instance.new("TextButton")
-    tpBackBtn.Parent = tpMenu
-    tpBackBtn.Size = UDim2.new(0.4, 0, 0.1, 0)
-    tpBackBtn.Position = UDim2.new(0.55, 0, 0.42, 0)
-    tpBackBtn.Text = "Back"
-    tpBackBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    tpBackBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    tpBackBtn.BorderSizePixel = 0
-
-    local tpUpBtn = Instance.new("TextButton")
-    tpUpBtn.Parent = tpMenu
-    tpUpBtn.Size = UDim2.new(0.4, 0, 0.1, 0)
-    tpUpBtn.Position = UDim2.new(0.05, 0, 0.53, 0)
-    tpUpBtn.Text = "Up"
-    tpUpBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    tpUpBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    tpUpBtn.BorderSizePixel = 0
-
-    local tpDownBtn = Instance.new("TextButton")
-    tpDownBtn.Parent = tpMenu
-    tpDownBtn.Size = UDim2.new(0.4, 0, 0.1, 0)
-    tpDownBtn.Position = UDim2.new(0.55, 0, 0.53, 0)
-    tpDownBtn.Text = "Down"
-    tpDownBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    tpDownBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    tpDownBtn.BorderSizePixel = 0
-
-    local tp1000DownBtn = Instance.new("TextButton")
-    tp1000DownBtn.Parent = tpMenu
-    tp1000DownBtn.Size = UDim2.new(0.8, 0, 0.12, 0)
-    tp1000DownBtn.Position = UDim2.new(0.1, 0, 0.68, 0)
-    tp1000DownBtn.Text = "TP 1000 Down"
-    tp1000DownBtn.BackgroundColor3 = Color3.fromRGB(150,50,150)
-    tp1000DownBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    tp1000DownBtn.BorderSizePixel = 0
-
-    local tpCloseBtn = Instance.new("TextButton")
-    tpCloseBtn.Parent = tpMenu
-    tpCloseBtn.Size = UDim2.new(0.4, 0, 0.1, 0)
-    tpCloseBtn.Position = UDim2.new(0.3, 0, 0.85, 0)
-    tpCloseBtn.Text = "Close"
-    tpCloseBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
-    tpCloseBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    tpCloseBtn.BorderSizePixel = 0
-
-    -- ========== ПОДМЕНЮ AIMBOT ==========
-    local aimTitle = Instance.new("TextLabel")
-    aimTitle.Parent = aimSettingsMenu
-    aimTitle.Size = UDim2.new(1, 0, 0, 30)
-    aimTitle.Text = "Aimbot Settings"
-    aimTitle.TextColor3 = Color3.fromRGB(255,255,255)
-    aimTitle.BackgroundTransparency = 1
-    aimTitle.Font = Enum.Font.GothamBold
-
-    local aimbotToggleButton = Instance.new("TextButton")
-    aimbotToggleButton.Parent = aimSettingsMenu
-    aimbotToggleButton.Size = UDim2.new(0.8, 0, 0.08, 0)
-    aimbotToggleButton.Position = UDim2.new(0.1, 0, 0.08, 0)
-    aimbotToggleButton.Text = "Aimbot: ВЫКЛ"
-    aimbotToggleButton.BackgroundColor3 = Color3.fromRGB(150,50,50)
-    aimbotToggleButton.TextColor3 = Color3.fromRGB(255,255,255)
-    aimbotToggleButton.BorderSizePixel = 0
-    local aimBtnCorner = Instance.new("UICorner")
-    aimBtnCorner.CornerRadius = UDim.new(0, 8)
-    aimBtnCorner.Parent = aimbotToggleButton
-
-    local aimDistLabel = Instance.new("TextLabel")
-    aimDistLabel.Parent = aimSettingsMenu
-    aimDistLabel.Size = UDim2.new(1, 0, 0, 20)
-    aimDistLabel.Position = UDim2.new(0, 0, 0.17, 0)
-    aimDistLabel.Text = "Aimbot Distance: " .. Settings.aimbotDistance
-    aimDistLabel.TextColor3 = Color3.fromRGB(200,200,200)
-    aimDistLabel.BackgroundTransparency = 1
-
-    local aimDistSliderContainer = Instance.new("Frame")
-    aimDistSliderContainer.Parent = aimSettingsMenu
-    aimDistSliderContainer.Size = UDim2.new(0.8, 0, 0, 15)
-    aimDistSliderContainer.Position = UDim2.new(0.1, 0, 0.22, 0)
-    aimDistSliderContainer.BackgroundColor3 = Color3.fromRGB(60,60,60)
-
-    local aimDistSliderBar = Instance.new("Frame")
-    aimDistSliderBar.Parent = aimDistSliderContainer
-    aimDistSliderBar.Size = UDim2.new(1, -2, 1, -2)
-    aimDistSliderBar.Position = UDim2.new(0, 1, 0, 1)
-    aimDistSliderBar.BackgroundColor3 = Color3.fromRGB(80,80,80)
-
-    local aimDistThumb = Instance.new("TextButton")
-    aimDistThumb.Parent = aimDistSliderBar
-    aimDistThumb.Size = UDim2.new(0, 12, 0, 12)
-    aimDistThumb.BackgroundColor3 = Color3.fromRGB(120,255,120)
-    aimDistThumb.BorderSizePixel = 0
-    aimDistThumb.Text = ""
-
-    local aimTargetButton = Instance.new("TextButton")
-    aimTargetButton.Parent = aimSettingsMenu
-    aimTargetButton.Size = UDim2.new(0.4, 0, 0.07, 0)
-    aimTargetButton.Position = UDim2.new(0.05, 0, 0.26, 0)
-    aimTargetButton.Text = "Цель: Голова"
-    aimTargetButton.BackgroundColor3 = Color3.fromRGB(50,150,50)
-    aimTargetButton.TextColor3 = Color3.fromRGB(255,255,255)
-    aimTargetButton.BorderSizePixel = 0
-
-    -- Ignore Walls button УДАЛЕН
-
-    local teamCheckButton = Instance.new("TextButton")
-    teamCheckButton.Parent = aimSettingsMenu
-    teamCheckButton.Size = UDim2.new(0.4, 0, 0.07, 0)
-    teamCheckButton.Position = UDim2.new(0.05, 0, 0.34, 0)
-    teamCheckButton.Text = "Team Check: ВКЛ"
-    teamCheckButton.BackgroundColor3 = Color3.fromRGB(50,150,50)
-    teamCheckButton.TextColor3 = Color3.fromRGB(255,255,255)
-    teamCheckButton.BorderSizePixel = 0
-
-    local triggerToggleButton = Instance.new("TextButton")
-    triggerToggleButton.Parent = aimSettingsMenu
-    triggerToggleButton.Size = UDim2.new(0.4, 0, 0.07, 0)
-    triggerToggleButton.Position = UDim2.new(0.55, 0, 0.34, 0)
-    triggerToggleButton.Text = "Trigger: ВЫКЛ"
-    triggerToggleButton.BackgroundColor3 = Color3.fromRGB(150,50,50)
-    triggerToggleButton.TextColor3 = Color3.fromRGB(255,255,255)
-    triggerToggleButton.BorderSizePixel = 0
-
-    local triggerDelayLabel = Instance.new("TextLabel")
-    triggerDelayLabel.Parent = aimSettingsMenu
-    triggerDelayLabel.Size = UDim2.new(1, 0, 0, 20)
-    triggerDelayLabel.Position = UDim2.new(0, 0, 0.42, 0)
-    triggerDelayLabel.Text = "Trigger Delay: " .. Settings.currentTriggerDelay .. " ms"
-    triggerDelayLabel.TextColor3 = Color3.fromRGB(200,200,200)
-    triggerDelayLabel.BackgroundTransparency = 1
-
-    local triggerDelaySliderContainer = Instance.new("Frame")
-    triggerDelaySliderContainer.Parent = aimSettingsMenu
-    triggerDelaySliderContainer.Size = UDim2.new(0.8, 0, 0, 15)
-    triggerDelaySliderContainer.Position = UDim2.new(0.1, 0, 0.47, 0)
-    triggerDelaySliderContainer.BackgroundColor3 = Color3.fromRGB(60,60,60)
-
-    local triggerDelaySliderBar = Instance.new("Frame")
-    triggerDelaySliderBar.Parent = triggerDelaySliderContainer
-    triggerDelaySliderBar.Size = UDim2.new(1, -2, 1, -2)
-    triggerDelaySliderBar.Position = UDim2.new(0, 1, 0, 1)
-    triggerDelaySliderBar.BackgroundColor3 = Color3.fromRGB(80,80,80)
-
-    local triggerDelayThumb = Instance.new("TextButton")
-    triggerDelayThumb.Parent = triggerDelaySliderBar
-    triggerDelayThumb.Size = UDim2.new(0, 12, 0, 12)
-    triggerDelayThumb.BackgroundColor3 = Color3.fromRGB(255,255,0)
-    triggerDelayThumb.BorderSizePixel = 0
-    triggerDelayThumb.Text = ""
-
-    local rageToggleButton = Instance.new("TextButton")
-    rageToggleButton.Parent = aimSettingsMenu
-    rageToggleButton.Size = UDim2.new(0.4, 0, 0.07, 0)
-    rageToggleButton.Position = UDim2.new(0.05, 0, 0.52, 0)
-    rageToggleButton.Text = "Rage Mode: ВЫКЛ"
-    rageToggleButton.BackgroundColor3 = Color3.fromRGB(150,50,50)
-    rageToggleButton.TextColor3 = Color3.fromRGB(255,255,255)
-    rageToggleButton.BorderSizePixel = 0
-
-    local aimCloseBtn = Instance.new("TextButton")
-    aimCloseBtn.Parent = aimSettingsMenu
-    aimCloseBtn.Size = UDim2.new(0.4, 0, 0.08, 0)
-    aimCloseBtn.Position = UDim2.new(0.3, 0, 0.85, 0)
-    aimCloseBtn.Text = "Close"
-    aimCloseBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
-    aimCloseBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    aimCloseBtn.BorderSizePixel = 0
-    local aimCloseCorner = Instance.new("UICorner")
-    aimCloseCorner.CornerRadius = UDim.new(0, 8)
-    aimCloseCorner.Parent = aimCloseBtn
-
-    -- Возвращаем все нужные ссылки
-    return {
-        mainFrame = mainFrame,
-        tpMenu = tpMenu,
-        aimSettingsMenu = aimSettingsMenu,
-        flySettingsMenu = flySettingsMenu,
-        speedLabel = speedLabel,
-        flySpeedLabel = flySpeedLabel,
-        espDistLabel = espDistLabel,
-        aimDistLabel = aimDistLabel,
-        triggerDelayLabel = triggerDelayLabel,
-        tpDistLabel = tpDistLabel,
-        thumb = thumb,
-        flyThumb = flyThumb,
-        espDistThumb = espDistThumb,
-        aimDistThumb = aimDistThumb,
-        triggerDelayThumb = triggerDelayThumb,
-        tpDistThumb = tpDistThumb,
-        v2Thumb = v2Thumb,
-        flySpeedV2Label = flySpeedV2Label,
-        flyToggleButton = flyToggleButton,
-        infJumpButton = infJumpButton,
-        speedToggleButton = speedToggleButton,
-        noclipButton = noclipButton,
-        espButton = espButton,
-        tpMenuButton = tpMenuButton,
-        aimSettingsButton = aimSettingsButton,
-        tpToggleButton = tpToggleButton,
-        tpPosLabel = tpPosLabel,
-        tpFrontBtn = tpFrontBtn,
-        tpBackBtn = tpBackBtn,
-        tpUpBtn = tpUpBtn,
-        tpDownBtn = tpDownBtn,
-        tp1000DownBtn = tp1000DownBtn,
-        tpCloseBtn = tpCloseBtn,
-        aimbotToggleButton = aimbotToggleButton,
-        aimTargetButton = aimTargetButton,
-        teamCheckButton = teamCheckButton,
-        triggerToggleButton = triggerToggleButton,
-        rageToggleButton = rageToggleButton,
-        aimCloseBtn = aimCloseBtn,
-        deviceLabel = deviceLabel,
-        devicePrevButton = devicePrevButton,
-        deviceNextButton = deviceNextButton,
-        aimbotStatusLabel = aimbotStatusLabel,
-        triggerStatusLabel = triggerStatusLabel,
-        closeButton = closeButton,
-        helpLabel = helpLabel,
-        v1Button = v1Button,
-        v2Button = v2Button,
-        sliderBar = sliderBar,
-        flySliderBar = flySliderBar,
-        espDistSliderBar = espDistSliderBar,
-        aimDistSliderBar = aimDistSliderBar,
-        triggerDelaySliderBar = triggerDelaySliderBar,
-        tpDistSliderBar = tpDistSliderBar,
-        v2SliderBar = v2SliderBar,
-        goodModeLabel = goodModeLabel,
-        -- новые элементы
-        fsButton = fsButton,
-        actionFrame = actionFrame,
-        actionAimbot = actionAimbot,
-        actionShotgun = actionShotgun,
-        actionEnergy = actionEnergy,
-        actionSniper = actionSniper,
-        actionFlyV2 = actionFlyV2,
-        actionToggleButton = actionToggleButton,
-    }
-end
-
--- Небольшая задержка перед созданием GUI, чтобы игра не подвисала
-task.wait(0.5)  -- FIX: добавлена задержка
-
--- Создаём GUI и получаем ссылки
-local gui = createGui()
-
--- ========== ОБРАБОТЧИКИ КНОПОК БЫСТРОГО МЕНЮ ==========
-if gui.actionAimbot then
-    gui.actionAimbot.MouseButton1Click:Connect(function()
-        toggleAimbot()
-    end)
-end
-if gui.actionShotgun then
-    gui.actionShotgun.MouseButton1Click:Connect(function()
-        Settings.shotgunModeEnabled = not Settings.shotgunModeEnabled
-        -- Обновим надпись в основном меню (если есть)
-        if gui.shotgunLabel then
-            gui.shotgunLabel.Text = "SHOTGUN MODE: " .. (Settings.shotgunModeEnabled and "ON" or "OFF")
-        end
-        updateStatus("Shotgun Mode " .. (Settings.shotgunModeEnabled and "включён" or "выключен"))
-    end)
-end
-if gui.actionEnergy then
-    gui.actionEnergy.MouseButton1Click:Connect(function()
-        Settings.energyModeEnabled = not Settings.energyModeEnabled
-        if gui.energyLabel then
-            gui.energyLabel.Text = "ENERGY MODE: " .. (Settings.energyModeEnabled and "ON" or "OFF")
-        end
-        updateStatus("Energy Mode " .. (Settings.energyModeEnabled and "включён" or "выключен"))
-    end)
-end
-if gui.actionSniper then
-    gui.actionSniper.MouseButton1Click:Connect(function()
-        Settings.sniperModeEnabled = not Settings.sniperModeEnabled
-        if gui.sniperMainLabel then
-            gui.sniperMainLabel.Text = "SNIPER MODE: " .. (Settings.sniperModeEnabled and "ON" or "OFF")
-        end
-        updateStatus("Sniper Mode " .. (Settings.sniperModeEnabled and "включён" or "выключен"))
-    end)
-end
-if gui.actionFlyV2 then
-    gui.actionFlyV2.MouseButton1Click:Connect(function()
-        Settings.flyMode = "V2"
-        -- Включаем/выключаем полёт
-        setFlightState(not Settings.isFlying)
-        -- Обновляем кнопки в FlySettings
-        if gui.v1Button and gui.v2Button then
-            gui.v1Button.BackgroundColor3 = Color3.fromRGB(80,80,80)
-            gui.v2Button.BackgroundColor3 = Color3.fromRGB(50,150,50)
-        end
-    end)
-end
-
--- ========== ФУНКЦИИ ДЛЯ ПОЛЗУНКОВ ==========
-local function updateSpeed(scale)
-    Settings.currentSpeed = math.floor(Settings.minSpeed + (Settings.maxSpeed - Settings.minSpeed) * scale)
-    gui.speedLabel.Text = "Скорость ходьбы: " .. Settings.currentSpeed
-end
-
-local function updateFlySpeed(scale)
-    Settings.currentFlySpeed = math.floor(Settings.minFlySpeed + (Settings.maxFlySpeed - Settings.minFlySpeed) * scale)
-    gui.flySpeedLabel.Text = "Скорость V1: " .. Settings.currentFlySpeed
-end
-
-local function updateEspDist(scale)
-    Settings.espDistance = math.floor(10 + (5000 - 10) * scale)
-    gui.espDistLabel.Text = "ESP Distance: " .. Settings.espDistance
-end
-
-local function updateAimbotDist(scale)
-    Settings.aimbotDistance = math.floor(Settings.minAimbotDist + (Settings.maxAimbotDist - Settings.minAimbotDist) * scale)
-    gui.aimDistLabel.Text = "Aimbot Distance: " .. Settings.aimbotDistance
-end
-
-local function updateTriggerDelay(scale)
-    Settings.currentTriggerDelay = math.floor(Settings.minTriggerDelay + (Settings.maxTriggerDelay - Settings.minTriggerDelay) * scale)
-    gui.triggerDelayLabel.Text = "Trigger Delay: " .. Settings.currentTriggerDelay .. " ms"
-end
-
-local function updateTPDist(scale)
-    Settings.tpDistance = math.floor(1 + (10 - 1) * scale)
-    gui.tpDistLabel.Text = "TP Distance: " .. Settings.tpDistance
-end
-
--- Перетаскивание ползунков
-local dragging = false
-local flyDragging = false
-local espDistDragging = false
-local aimDistDragging = false
-local triggerDelayDragging = false
-local tpDistDragging = false
-local v2Dragging = false
-
-gui.thumb.MouseButton1Down:Connect(function() dragging = true end)
-gui.flyThumb.MouseButton1Down:Connect(function() flyDragging = true end)
-gui.espDistThumb.MouseButton1Down:Connect(function() espDistDragging = true end)
-gui.aimDistThumb.MouseButton1Down:Connect(function() aimDistDragging = true end)
-gui.triggerDelayThumb.MouseButton1Down:Connect(function() triggerDelayDragging = true end)
-gui.tpDistThumb.MouseButton1Down:Connect(function() tpDistDragging = true end)
-gui.v2Thumb.MouseButton1Down:Connect(function() v2Dragging = true end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-        flyDragging = false
-        espDistDragging = false
-        aimDistDragging = false
-        triggerDelayDragging = false
-        tpDistDragging = false
-        v2Dragging = false
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        if dragging then
-            local barPos = gui.sliderBar.AbsolutePosition
-            local barSize = gui.sliderBar.AbsoluteSize
-            local x = math.clamp(input.Position.X - barPos.X, 0, barSize.X)
-            local scale = x / barSize.X
-            gui.thumb.Position = UDim2.new(scale, -6, 0.5, -6)
-            updateSpeed(scale)
-        end
-        if flyDragging then
-            local barPos = gui.flySliderBar.AbsolutePosition
-            local barSize = gui.flySliderBar.AbsoluteSize
-            local x = math.clamp(input.Position.X - barPos.X, 0, barSize.X)
-            local scale = x / barSize.X
-            gui.flyThumb.Position = UDim2.new(scale, -6, 0.5, -6)
-            updateFlySpeed(scale)
-        end
-        if espDistDragging then
-            local barPos = gui.espDistSliderBar.AbsolutePosition
-            local barSize = gui.espDistSliderBar.AbsoluteSize
-            local x = math.clamp(input.Position.X - barPos.X, 0, barSize.X)
-            local scale = x / barSize.X
-            gui.espDistThumb.Position = UDim2.new(scale, -6, 0.5, -6)
-            updateEspDist(scale)
-        end
-        if aimDistDragging then
-            local barPos = gui.aimDistSliderBar.AbsolutePosition
-            local barSize = gui.aimDistSliderBar.AbsoluteSize
-            local x = math.clamp(input.Position.X - barPos.X, 0, barSize.X)
-            local scale = x / barSize.X
-            gui.aimDistThumb.Position = UDim2.new(scale, -6, 0.5, -6)
-            updateAimbotDist(scale)
-        end
-        if triggerDelayDragging then
-            local barPos = gui.triggerDelaySliderBar.AbsolutePosition
-            local barSize = gui.triggerDelaySliderBar.AbsoluteSize
-            local x = math.clamp(input.Position.X - barPos.X, 0, barSize.X)
-            local scale = x / barSize.X
-            gui.triggerDelayThumb.Position = UDim2.new(scale, -6, 0.5, -6)
-            updateTriggerDelay(scale)
-        end
-        if tpDistDragging then
-            local barPos = gui.tpDistSliderBar.AbsolutePosition
-            local barSize = gui.tpDistSliderBar.AbsoluteSize
-            local x = math.clamp(input.Position.X - barPos.X, 0, barSize.X)
-            local scale = x / barSize.X
-            gui.tpDistThumb.Position = UDim2.new(scale, -6, 0.5, -6)
-            updateTPDist(scale)
-        end
-        if v2Dragging then
-            local barPos = gui.v2SliderBar.AbsolutePosition
-            local barSize = gui.v2SliderBar.AbsoluteSize
-            local x = math.clamp(input.Position.X - barPos.X, 0, barSize.X)
-            local scale = x / barSize.X
-            gui.v2Thumb.Position = UDim2.new(scale, -6, 0.5, -6)
-            Settings.flySpeedV2 = math.floor(Settings.minFlySpeedV2 + (Settings.maxFlySpeedV2 - Settings.minFlySpeedV2) * scale)
-            gui.flySpeedV2Label.Text = "V2 Speed: " .. Settings.flySpeedV2
+            return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
         end
     end
-end)
-
--- ========== ФУНКЦИИ ТЕЛЕПОРТАЦИИ ==========
-local function getNearestEnemy()
-    local myRoot = character and character:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return nil end
-    local myPos = myRoot.Position
-    local nearest = nil
-    local nearestDist = math.huge
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and isEnemy(plr) then
-            local char = plr.Character
-            if char then
-                local root = char:FindFirstChild("HumanoidRootPart")
-                local hum = char:FindFirstChild("Humanoid")
-                if root and hum and hum.Health > 0 then
-                    local dist = (root.Position - myPos).Magnitude
-                    if dist < nearestDist then
-                        nearestDist = dist
-                        nearest = root
-                    end
-                end
-            end
-        end
-    end
-    return nearest
-end
-
-local function teleportToEnemy()
-    local targetRoot = getNearestEnemy()
-    if not targetRoot then return end
-    local myRoot = character and character:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return end
-
-    local targetPos = targetRoot.Position
-    local offset
-    if Settings.tpPosition == "Front" then
-        offset = targetRoot.CFrame.LookVector * Settings.tpDistance
-    elseif Settings.tpPosition == "Back" then
-        offset = -targetRoot.CFrame.LookVector * Settings.tpDistance
-    elseif Settings.tpPosition == "Up" then
-        offset = Vector3.new(0, Settings.tpDistance, 0)
-    elseif Settings.tpPosition == "Down" then
-        offset = Vector3.new(0, -Settings.tpDistance, 0)
-    else
-        offset = Vector3.new(0,0,0)
-    end
-    local newPos = targetPos + offset
-    myRoot.CFrame = CFrame.new(newPos)
-end
-
-local function teleport1000Down()
-    local myRoot = character and character:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return end
-    myRoot.CFrame = myRoot.CFrame + Vector3.new(0, -1000, 0)
-    updateStatus("Телепортация на 1000 вниз")
-end
-
-local function startTPLoop()
-    if tpConnection then tpConnection:Disconnect() end
-    tpConnection = RunService.Heartbeat:Connect(teleportToEnemy)
-end
-
-local function stopTPLoop()
-    if tpConnection then
-        tpConnection:Disconnect()
-        tpConnection = nil
-    end
-end
-
-local function toggleTP()
-    Settings.tpEnabled = not Settings.tpEnabled
-    if Settings.tpEnabled then
-        gui.tpToggleButton.Text = "Auto TP: ВКЛ"
-        gui.tpToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        startTPLoop()
-        updateStatus("Авто-телепортация включена")
-    else
-        gui.tpToggleButton.Text = "Auto TP: ВЫКЛ"
-        gui.tpToggleButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        stopTPLoop()
-        updateStatus("Авто-телепортация выключена")
-    end
-end
-
-local function setTPPosition(pos)
-    Settings.tpPosition = pos
-    gui.tpPosLabel.Text = "Position: " .. pos
-    updateStatus("Позиция ТП: " .. pos)
-end
-
--- ========== ФУНКЦИИ AIMBOT ==========
-local function getTargetPart(targetChar)
-    local part = nil
     if Settings.aimbotTargetPart == "Head" then
-        part = targetChar:FindFirstChild("Head")
+        return char:FindFirstChild("Head")
     else
-        part = targetChar:FindFirstChild("HumanoidRootPart") or
-               targetChar:FindFirstChild("Torso") or
-               targetChar:FindFirstChild("UpperTorso") or
-               targetChar:FindFirstChild("LowerTorso")
+        return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
     end
-    if part then return part end
-    for _, child in ipairs(targetChar:GetChildren()) do
-        if child:IsA("BasePart") then
-            return child
+end
+
+local function findBestTarget()
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil, nil end
+    local myPos = character.HumanoidRootPart.Position
+    local candidates = {}
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= player and other.Character and isEnemy(other) then
+            local targetChar = other.Character
+            local hum = targetChar:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then
+                local part = getTargetPart(targetChar)
+                if part and canSee(part) then
+                    local dist = (part.Position - myPos).Magnitude
+                    if dist <= Settings.aimbotDistance then
+                        table.insert(candidates, {player=other, part=part, dist=dist, health=hum.Health})
+                    end
+                end
+            end
+        end
+    end
+    if #candidates == 0 then return nil, nil end
+    if not Settings.aimbotPriorityEnabled then
+        table.sort(candidates, function(a,b) return a.dist < b.dist end)
+        local best = candidates[1]
+        return best.player, best.part
+    else
+        if Settings.aimbotPriority == "Closest" then
+            table.sort(candidates, function(a,b) return a.dist < b.dist end)
+        elseif Settings.aimbotPriority == "LowHealth" then
+            table.sort(candidates, function(a,b) return a.health < b.health end)
+        elseif Settings.aimbotPriority == "HighHealth" then
+            table.sort(candidates, function(a,b) return a.health > b.health end)
+        elseif Settings.aimbotPriority == "Random" then
+            local rand = candidates[math.random(1, #candidates)]
+            return rand.player, rand.part
+        end
+        local best = candidates[1]
+        return best.player, best.part
+    end
+end
+
+local function aimAt(part)
+    if not Camera or not part then return end
+    local targetPos = part.Position
+    local newCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
+    local smooth = Settings.aimbotSmoothness * (0.9 + 0.2*math.random())
+    Camera.CFrame = Camera.CFrame:Lerp(newCFrame, smooth)
+end
+
+local rmbHeld = false
+UserInputService.InputBegan:Connect(function(inp,gp) if not gp and inp.UserInputType == Enum.UserInputType.MouseButton2 then rmbHeld = true end end)
+UserInputService.InputEnded:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton2 then rmbHeld = false end end)
+
+function startAimbot()
+    if aimbotConnection then aimbotConnection:Disconnect() end
+    if cameraConnection then cameraConnection:Disconnect() end
+    aimbotConnection = RunService.Heartbeat:Connect(function()
+        local active = Settings.aimbotEnabled
+        if Settings.aimbotOnRMB then active = active and rmbHeld end
+        if active then
+            local _, part = findBestTarget()
+            if part then
+                aimAt(part)
+                aimTarget = part
+            elseif not Settings.aimbotStayOnTarget then
+                aimTarget = nil
+            end
+        end
+    end)
+    cameraConnection = Camera:GetPropertyChangedSignal("CFrame"):Connect(function()
+        local active = Settings.aimbotEnabled
+        if Settings.aimbotOnRMB then active = active and rmbHeld end
+        if active and aimTarget and aimTarget.Parent then aimAt(aimTarget) end
+    end)
+end
+local function toggleAimbot(s) Settings.aimbotEnabled = s; if s then startAimbot() else if aimbotConnection then aimbotConnection:Disconnect(); aimbotConnection=nil end; if cameraConnection then cameraConnection:Disconnect(); cameraConnection=nil end; aimTarget=nil end end
+
+-- ==================== TRIGGERBOT ====================
+local triggerbotConnection, lastShot = nil, 0
+local function getTargetFromCam()
+    local ray = Camera:ScreenPointToRay(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y)
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {character, Camera}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    local res = Workspace:Raycast(ray.Origin, ray.Direction*1000, params)
+    if res and res.Instance then
+        local char = res.Instance:FindFirstAncestorOfClass("Model")
+        if char and char:FindFirstChild("Humanoid") then
+            local plr = Players:GetPlayerFromCharacter(char)
+            if plr and isEnemy(plr) then return plr end
         end
     end
     return nil
 end
-
-local function findNearestTarget()
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil, nil end
-    local myPos = character.HumanoidRootPart.Position
-    local nearestPlayer = nil
-    local nearestPart = nil
-    local shortestDist = Settings.aimbotDistance
-    for _, otherPlayer in ipairs(Players:GetPlayers()) do
-        if otherPlayer ~= player and otherPlayer.Character then
-            if not isEnemy(otherPlayer) then continue end
-            local targetChar = otherPlayer.Character
-            local targetHumanoid = targetChar:FindFirstChild("Humanoid")
-            if targetHumanoid and targetHumanoid.Health > 0 then
-                local targetPart = getTargetPart(targetChar)
-                if targetPart then
-                    local dist = (targetPart.Position - myPos).Magnitude
-                    if dist < shortestDist then
-                        -- Ignore walls всегда включён
-                        shortestDist = dist
-                        nearestPlayer = otherPlayer
-                        nearestPart = targetPart
-                    end
-                end
-            end
-        end
-    end
-    return nearestPlayer, nearestPart
-end
-
-local function aimAtTarget(targetPart)
-    if not Camera or not targetPart then return end
-    local targetPos = targetPart.Position
-    local cameraPos = Camera.CFrame.Position
-    local direction = (targetPos - cameraPos).Unit
-    local newCFrame = CFrame.lookAt(cameraPos, cameraPos + direction)
-    local smooth = Settings.aimbotSmoothness * (0.9 + 0.2 * math.random())
-    Camera.CFrame = Camera.CFrame:Lerp(newCFrame, smooth)
-end
-
-function startAimbotLoop()
-    if aimbotConnection then aimbotConnection:Disconnect() end
-    if cameraConnection then cameraConnection:Disconnect() end
-    aimbotConnection = RunService.Heartbeat:Connect(function()
-        if Settings.aimbotEnabled then
-            local nearestPlayer, targetPart = findNearestTarget()
-            if targetPart then
-                aimAtTarget(targetPart)
-                aimTarget = targetPart
-                gui.aimbotStatusLabel.Text = "Aimbot: активен | Цель: " .. (nearestPlayer and nearestPlayer.Name or "неизв.")
-            else
-                aimTarget = nil
-                gui.aimbotStatusLabel.Text = "Aimbot: активен | Цель: нет"
-            end
-        end
-    end)
-    if Camera then
-        cameraConnection = Camera:GetPropertyChangedSignal("CFrame"):Connect(function()
-            if Settings.aimbotEnabled and aimTarget and aimTarget.Parent then
-                aimAtTarget(aimTarget)
-            end
-        end)
-    end
-end
-
--- ========== TRIGGERBOT ==========
-local function getTargetFromCamera()
-    if not Camera then return nil, nil end
-
-    local currentWeapon = getCurrentWeapon()
-    local isEnergyWeapon = false
-    for _, name in ipairs(Settings.energyWeapons) do
-        if currentWeapon == name then isEnergyWeapon = true; break end
-    end
-
-    if Settings.energyModeEnabled and isEnergyWeapon then
-        local ray = Camera:ScreenPointToRay(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y)
-        local params = RaycastParams.new()
-        local whitelist = {}
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= player and isEnemy(plr) and plr.Character then
-                for _, part in ipairs(plr.Character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        table.insert(whitelist, part)
-                    end
-                end
-            end
-        end
-        params.FilterDescendantsInstances = whitelist
-        params.FilterType = Enum.RaycastFilterType.Whitelist
-        local result = Workspace:Raycast(ray.Origin, ray.Direction * 1000, params)
-        if result and result.Instance then
-            local hitPart = result.Instance
-            local targetChar = hitPart:FindFirstAncestorOfClass("Model")
-            if targetChar and targetChar:FindFirstChild("Humanoid") then
-                local targetPlayer = Players:GetPlayerFromCharacter(targetChar)
-                return targetPlayer, targetChar
-            end
-        end
-        return nil, nil
-    else
-        local ray = Camera:ScreenPointToRay(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y)
-        local params = RaycastParams.new()
-        params.FilterDescendantsInstances = {character, Camera}
-        params.FilterType = Enum.RaycastFilterType.Blacklist
-        local result = Workspace:Raycast(ray.Origin, ray.Direction * 1000, params)
-        if result and result.Instance then
-            local hitPart = result.Instance
-            local targetChar = hitPart:FindFirstAncestorOfClass("Model")
-            if targetChar and targetChar:FindFirstChild("Humanoid") then
-                local targetPlayer = Players:GetPlayerFromCharacter(targetChar)
-                if targetPlayer and isEnemy(targetPlayer) then
-                    return targetPlayer, targetChar
-                end
-            end
-        end
-        return nil, nil
-    end
-end
-
-local function originalShoot()
-    pcall(function()
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-        task.wait()
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-    end)
-end
-
-local function shoot()
-    if Settings.sniperModeEnabled and getCurrentWeapon() == Settings.sniperModeWeapon then
-        startRecoilCompensation(Settings.sniperModeRecoilStrength)
-    end
-    originalShoot()
-end
-
-local function startRecoilCompensation(strength)
-    if not Settings.sniperModeEnabled then return end
-    local weapon = getCurrentWeapon()
-    if weapon ~= Settings.sniperModeWeapon then return end
-
-    originalCFrame = Camera.CFrame
-    if compensationConnection then compensationConnection:Disconnect() end
-    local startTime = tick()
-    compensationConnection = RunService.Heartbeat:Connect(function()
-        local elapsed = tick() - startTime
-        if elapsed > 0.2 then
-            compensationConnection:Disconnect()
-            compensationConnection = nil
-            return
-        end
-        if originalCFrame then
-            Camera.CFrame = Camera.CFrame:Lerp(originalCFrame, strength * 0.1)
-        end
-    end)
-end
-
--- Глобальный обработчик клика мыши УДАЛЁН
-
-function startTriggerbotLoop()
+function startTriggerbot()
     if triggerbotConnection then triggerbotConnection:Disconnect() end
     triggerbotConnection = RunService.Heartbeat:Connect(function()
-        if Settings.triggerbotEnabled then
-            local targetPlayer, targetChar
-            local shouldShoot = false
-
-            if Settings.rageMode and aimTarget and aimTarget.Parent then
-                local targetHumanoid = aimTarget.Parent:FindFirstChild("Humanoid")
-                if targetHumanoid and targetHumanoid.Health > 0 then
-                    local myRoot = character and character:FindFirstChild("HumanoidRootPart")
-                    if myRoot then
-                        local dist = (aimTarget.Position - myRoot.Position).Magnitude
-                        if dist <= Settings.aimbotDistance then
-                            shouldShoot = true
-                            targetPlayer = Players:GetPlayerFromCharacter(aimTarget.Parent)
-                        end
-                    end
+        local active = Settings.triggerbotEnabled or (Settings.rageBotEnabled and Settings.rageTriggerbot)
+        if active then
+            local target = getTargetFromCam()
+            if target then
+                local delay = Settings.rageBotEnabled and Settings.rageShootDelay or Settings.currentTriggerDelay
+                local now = tick()*1000
+                if now - lastShot >= delay then
+                    VirtualInputManager:SendMouseButtonEvent(0,0,0,true,game,1)
+                    task.wait()
+                    VirtualInputManager:SendMouseButtonEvent(0,0,0,false,game,1)
+                    lastShot = now
                 end
-            else
-                targetPlayer, targetChar = getTargetFromCamera()
-                if targetPlayer then
-                    shouldShoot = true
-                end
-            end
-
-            if shouldShoot then
-                gui.triggerStatusLabel.Text = "Trigger: активен | Цель: " .. (targetPlayer and targetPlayer.Name or aimTarget and aimTarget.Parent.Name or "неизв.")
-                local now = tick() * 1000
-                if now - Settings.lastShotTime >= Settings.currentTriggerDelay then
-                    shoot()
-                    Settings.lastShotTime = now
-                end
-            else
-                gui.triggerStatusLabel.Text = "Trigger: активен | Цель: нет"
             end
         end
     end)
 end
+local function toggleTriggerbot(s) Settings.triggerbotEnabled = s; if s then startTriggerbot() else if triggerbotConnection then triggerbotConnection:Disconnect(); triggerbotConnection=nil end end end
 
--- ========== ESP ==========
-if not Drawing then
-    warn("Drawing не поддерживается, ESP будет недоступен")
-end
-
-local function removeESPForPlayer(plr)
-    if espData[plr] then
-        if espData[plr].box then 
-            espData[plr].box.Visible = false
-            espData[plr].box:Remove() 
-        end
-        if espData[plr].name then 
-            espData[plr].name.Visible = false
-            espData[plr].name:Remove() 
-        end
-        if espData[plr].health then 
-            espData[plr].health.Visible = false
-            espData[plr].health:Remove() 
-        end
-        espData[plr] = nil
+-- ==================== RAGE BOT ====================
+local function applyRage()
+    if Settings.rageBotEnabled then
+        if not Settings.aimbotEnabled and Settings.rageAimbot then toggleAimbot(true) end
+        if not Settings.triggerbotEnabled and Settings.rageTriggerbot then toggleTriggerbot(true) end
     end
 end
+local function toggleRageBot(s) Settings.rageBotEnabled = s; if s then applyRage() else updateStatus("Rage Bot выключен") end end
 
-local function createESPForPlayer(plr)
-    if plr == player then return end
-    if not Drawing then return end
-    
-    removeESPForPlayer(plr)
-
-    local function onCharacterAdded(char)
-        local function setupESP()
-            local hum = char:FindFirstChild("Humanoid")
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if not hum or not root then
-                task.wait(0.5)
-                return setupESP()
-            end
-
-            local esp = {}
-            esp.box = Drawing.new("Square")
-            esp.box.Thickness = 2
-            esp.box.Filled = false
-            esp.box.Color = isEnemy(plr) and Color3.new(1,0,0) or Color3.new(0,1,0)
-            esp.box.Visible = false
-
-            esp.name = Drawing.new("Text")
-            esp.name.Size = 16
-            esp.name.Center = true
-            esp.name.Outline = true
-            esp.name.Color = Color3.new(1,1,1)
-            esp.name.Visible = false
-
-            esp.health = Drawing.new("Text")
-            esp.health.Size = 14
-            esp.health.Outline = true
-            esp.health.Color = Color3.new(0,1,0)
-            esp.health.Visible = false
-
-            espData[plr] = esp
-        end
-        setupESP()
-    end
-
-    if plr.Character then
-        onCharacterAdded(plr.Character)
-    end
-    
-    plr.CharacterAdded:Connect(onCharacterAdded)
-    plr.CharacterRemoving:Connect(function()
-        removeESPForPlayer(plr)
-    end)
-end
-
-local function updateESPForPlayer(plr, esp)
-    if not Settings.espEnabled then
-        if esp and esp.box then 
-            esp.box.Visible = false
-        end
-        return
-    end
-    
-    if not esp or not esp.box then return end
-    
-    local char = plr.Character
-    if not char then
-        esp.box.Visible = false
-        if esp.name then esp.name.Visible = false end
-        if esp.health then esp.health.Visible = false end
-        return
-    end
-    
-    local hum = char:FindFirstChild("Humanoid")
-    local root = char:FindFirstChild("HumanoidRootPart")
-    
-    if not hum or not root or hum.Health <= 0 then
-        esp.box.Visible = false
-        if esp.name then esp.name.Visible = false end
-        if esp.health then esp.health.Visible = false end
-        return
-    end
-
-    local myRoot = character and character:FindFirstChild("HumanoidRootPart")
-    if myRoot then
-        local dist = (root.Position - myRoot.Position).Magnitude
-        if dist > Settings.espDistance then
-            esp.box.Visible = false
-            if esp.name then esp.name.Visible = false end
-            if esp.health then esp.health.Visible = false end
-            return
-        end
-    end
-
-    local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
-    if onScreen then
-        local head = char:FindFirstChild("Head")
-        local headPos = head and head.Position or root.Position + Vector3.new(0, 2, 0)
-        local headScreen, _ = Camera:WorldToViewportPoint(headPos)
-        local height = math.abs(headScreen.Y - pos.Y) * 2
-        local width = height * 0.6
-
-        local espColor = isEnemy(plr) and Color3.new(1,0,0) or Color3.new(0,1,0)
-        
-        esp.box.Visible = true
-        esp.box.Position = Vector2.new(pos.X - width/2, pos.Y - height/2)
-        esp.box.Size = Vector2.new(width, height)
-        esp.box.Color = espColor
-
-        if esp.name then
-            esp.name.Visible = true
-            esp.name.Position = Vector2.new(pos.X, pos.Y - height/2 - 16)
-            esp.name.Text = plr.Name
-            esp.name.Color = espColor
-        end
-
-        if esp.health then
-            esp.health.Visible = true
-            esp.health.Position = Vector2.new(pos.X + width/2 + 5, pos.Y - height/2)
-            esp.health.Text = math.floor(hum.Health) .. "/" .. math.floor(hum.MaxHealth)
-            local healthPercent = hum.Health / hum.MaxHealth
-            esp.health.Color = Color3.new(1 - healthPercent, healthPercent, 0)
-        end
-    else
-        esp.box.Visible = false
-        if esp.name then esp.name.Visible = false end
-        if esp.health then esp.health.Visible = false end
-    end
-end
-
-local function espHeartbeatUpdate()
-    frameSkip = frameSkip + 1
-    if frameSkip % 3 ~= 0 then return end  -- FIX: обновляем каждый 3-й кадр
-    for plr, esp in pairs(espData) do
-        if plr and plr.Parent then
-            updateESPForPlayer(plr, esp)
-        else
-            removeESPForPlayer(plr)
-        end
-    end
-end
-
-local function onPlayerRemoving(plr)
-    removeESPForPlayer(plr)
-end
-
-Players.PlayerRemoving:Connect(onPlayerRemoving)
-
-local function toggleESP()
-    Settings.espEnabled = not Settings.espEnabled
-    if Settings.espEnabled then
-        gui.espButton.Text = "ESP: ВКЛ"
-        gui.espButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        
-        for plr, esp in pairs(espData) do
-            if esp.box then esp.box:Remove() end
-            if esp.name then esp.name:Remove() end
-            if esp.health then esp.health:Remove() end
-        end
-        espData = {}
-        
-        -- FIX: создаём ESP для игроков асинхронно с паузами
-        task.spawn(function()
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= player then
-                    createESPForPlayer(plr)
-                    task.wait()  -- небольшая пауза между созданиями
-                end
-            end
-        end)
-        
-        local playerAddedConn = Players.PlayerAdded:Connect(function(newPlr)
-            if newPlr ~= player then
-                task.spawn(function()
-                    createESPForPlayer(newPlr)
-                end)
-            end
-        end)
-        table.insert(espConnections, playerAddedConn)
-        
-        if not espUpdateConnection then
-            espUpdateConnection = RunService.Heartbeat:Connect(espHeartbeatUpdate)
-        end
-        
-        updateStatus("ESP активирован")
-    else
-        gui.espButton.Text = "ESP: ВЫКЛ"
-        gui.espButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        
-        if espUpdateConnection then
-            espUpdateConnection:Disconnect()
-            espUpdateConnection = nil
-        end
-        
-        for _, conn in ipairs(espConnections) do
-            conn:Disconnect()
-        end
-        espConnections = {}
-        
-        for plr, esp in pairs(espData) do
-            if esp.box then 
-                esp.box.Visible = false
-                esp.box:Remove() 
-            end
-            if esp.name then 
-                esp.name.Visible = false
-                esp.name:Remove() 
-            end
-            if esp.health then 
-                esp.health.Visible = false
-                esp.health:Remove() 
-            end
-        end
-        espData = {}
-        
-        updateStatus("ESP деактивирован")
-    end
-end
-
--- ========== ФУНКЦИИ КНОПОК ==========
-local function toggleAimbot()
-    Settings.aimbotEnabled = not Settings.aimbotEnabled
-    if Settings.aimbotEnabled then
-        gui.aimbotToggleButton.Text = "Aimbot: ВКЛ"
-        gui.aimbotToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        gui.aimbotStatusLabel.Text = "Aimbot: активен | Поиск..."
-        updateStatus("Aimbot активирован")
-        startAimbotLoop()
-    else
-        gui.aimbotToggleButton.Text = "Aimbot: ВЫКЛ"
-        gui.aimbotToggleButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        aimTarget = nil
-        gui.aimbotStatusLabel.Text = "Aimbot: не активен | Цель: нет"
-        updateStatus("Aimbot деактивирован")
-        if aimbotConnection then aimbotConnection:Disconnect() aimbotConnection = nil end
-        if cameraConnection then cameraConnection:Disconnect() cameraConnection = nil end
-    end
-end
-
-local function toggleAimbotTarget()
-    if Settings.aimbotTargetPart == "Head" then
-        Settings.aimbotTargetPart = "Torso"
-        gui.aimTargetButton.Text = "Цель: Тело"
-        gui.aimTargetButton.BackgroundColor3 = Color3.fromRGB(200, 100, 0)
-    else
-        Settings.aimbotTargetPart = "Head"
-        gui.aimTargetButton.Text = "Цель: Голова"
-        gui.aimTargetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-    end
-    updateStatus("Цель аимбота: " .. Settings.aimbotTargetPart)
-end
-
-local function toggleTeamCheck()
-    Settings.teamCheck = not Settings.teamCheck
-    if Settings.teamCheck then
-        gui.teamCheckButton.Text = "Team Check: ВКЛ"
-        gui.teamCheckButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        updateStatus("Проверка команды включена")
-    else
-        gui.teamCheckButton.Text = "Team Check: ВЫКЛ"
-        gui.teamCheckButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        updateStatus("Проверка команды выключена")
-    end
-end
-
-local function toggleRageMode()
-    Settings.rageMode = not Settings.rageMode
-    if Settings.rageMode then
-        gui.rageToggleButton.Text = "Rage Mode: ВКЛ"
-        gui.rageToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        if not Settings.triggerbotEnabled then
-            Settings.triggerbotEnabled = true
-            gui.triggerToggleButton.Text = "Trigger: ВКЛ"
-            gui.triggerToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-            gui.triggerStatusLabel.Text = "Trigger: активен | Поиск..."
-            Settings.lastShotTime = 0
-            startTriggerbotLoop()
-        end
-        updateStatus("Rage Mode активирован")
-    else
-        gui.rageToggleButton.Text = "Rage Mode: ВЫКЛ"
-        gui.rageToggleButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        updateStatus("Rage Mode деактивирован")
-    end
-end
-
-local function toggleTriggerbot()
-    Settings.triggerbotEnabled = not Settings.triggerbotEnabled
-    if Settings.triggerbotEnabled then
-        gui.triggerToggleButton.Text = "Trigger: ВКЛ"
-        gui.triggerToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        gui.triggerStatusLabel.Text = "Trigger: активен | Поиск..."
-        updateStatus("Trigger активирован")
-        Settings.lastShotTime = 0
-        startTriggerbotLoop()
-    else
-        gui.triggerToggleButton.Text = "Trigger: ВЫКЛ"
-        gui.triggerToggleButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        gui.triggerStatusLabel.Text = "Trigger: не активен"
-        updateStatus("Trigger деактивирован")
-        if triggerbotConnection then triggerbotConnection:Disconnect() triggerbotConnection = nil end
-    end
-end
-
--- ========== ПРОЧИЕ ФУНКЦИИ ==========
-local function setupSpeedController()
+-- ==================== SPEED, FLY, NOCLIP, INFJUMP ====================
+local speedController = nil
+local bodyVelocity = nil
+local function setupSpeed()
     if not character then return end
     local root = character:FindFirstChild("HumanoidRootPart")
     if not root then return end
@@ -2148,496 +354,590 @@ local function setupSpeedController()
         speedController.Parent = root
     end
 end
-
-local function removeSpeedController()
-    if speedController then
-        speedController:Destroy()
-        speedController = nil
-    end
-end
-
-local function applySpeedState()
-    if Settings.speedEnabled then
-        if character then setupSpeedController() end
-    else
-        removeSpeedController()
-    end
-end
-
-local function updateSpeedController()
-    if not speedController or not character or not humanoid then return end
-    if Settings.isFlying then
+local function removeSpeed() if speedController then speedController:Destroy(); speedController=nil end end
+local function applySpeedState() if Settings.speedEnabled then setupSpeed() else removeSpeed() end end
+RunService.Heartbeat:Connect(function()
+    if speedController and character and humanoid and not Settings.isFlying then
+        local move = humanoid.MoveDirection
+        if move.Magnitude > 0.01 then
+            speedController.Velocity = move * (Settings.currentSpeed * (0.95+0.1*math.random()))
+        else
+            speedController.Velocity = Vector3.new(0, speedController.Velocity.Y, 0)
+        end
+    elseif speedController and Settings.isFlying then
         speedController.Velocity = Vector3.new(0,0,0)
-        return
     end
-    local moveDir = humanoid.MoveDirection
-    if moveDir.Magnitude > 0.01 then
-        local speedVar = Settings.currentSpeed * (0.95 + 0.1 * math.random())
-        speedController.Velocity = moveDir * speedVar
-    else
-        speedController.Velocity = Vector3.new(0, speedController.Velocity.Y, 0)
-    end
-end
-RunService.Heartbeat:Connect(updateSpeedController)
+end)
+local function toggleSpeed(s) Settings.speedEnabled = s; if s then applySpeedState() else removeSpeed() end end
 
--- ========== ПОЛЁТ ==========
 local function setFlightState(state)
     if state == Settings.isFlying then return end
     Settings.isFlying = state
-    if Settings.isFlying then
+    if state then
         local root = character and character:FindFirstChild("HumanoidRootPart")
         if root then
             if not bodyVelocity then
                 bodyVelocity = Instance.new("BodyVelocity")
-                bodyVelocity.Name = "FlightController"
-                bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                bodyVelocity.Velocity = Vector3.new(0,0,0)
+                bodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
                 bodyVelocity.Parent = root
             end
             humanoid.PlatformStand = true
-            gui.flyToggleButton.Text = "Полёт: ВКЛ"
-            gui.flyToggleButton.BackgroundColor3 = Color3.fromRGB(50,150,50)
-            updateStatus("Полёт активирован (режим " .. Settings.flyMode .. ")")
-        else
-            Settings.isFlying = false
-            updateStatus("Ошибка: нет HumanoidRootPart")
         end
     else
-        if bodyVelocity then
-            bodyVelocity:Destroy()
-            bodyVelocity = nil
-        end
+        if bodyVelocity then bodyVelocity:Destroy(); bodyVelocity=nil end
         humanoid.PlatformStand = false
-        gui.flyToggleButton.Text = "Полёт: ВЫКЛ"
-        gui.flyToggleButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
-        updateStatus("Полёт деактивирован")
     end
 end
 
-local function toggleFlight()
-    setFlightState(not Settings.isFlying)
-end
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.W then
-        Settings.wPressed = true
-    end
+local w,a,s,d,space,shift = false,false,false,false,false,false
+UserInputService.InputBegan:Connect(function(inp,gp)
+    if gp then return end
+    if inp.KeyCode == Enum.KeyCode.W then w=true
+    elseif inp.KeyCode == Enum.KeyCode.A then a=true
+    elseif inp.KeyCode == Enum.KeyCode.S then s=true
+    elseif inp.KeyCode == Enum.KeyCode.D then d=true
+    elseif inp.KeyCode == Enum.KeyCode.Space then space=true
+    elseif inp.KeyCode == Enum.KeyCode.LeftShift then shift=true end
 end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.W then
-        Settings.wPressed = false
-    end
+UserInputService.InputEnded:Connect(function(inp)
+    if inp.KeyCode == Enum.KeyCode.W then w=false
+    elseif inp.KeyCode == Enum.KeyCode.A then a=false
+    elseif inp.KeyCode == Enum.KeyCode.S then s=false
+    elseif inp.KeyCode == Enum.KeyCode.D then d=false
+    elseif inp.KeyCode == Enum.KeyCode.Space then space=false
+    elseif inp.KeyCode == Enum.KeyCode.LeftShift then shift=false end
 end)
-
 RunService.Heartbeat:Connect(function()
-    if Settings.isFlying and bodyVelocity and humanoid then
+    if Settings.isFlying and bodyVelocity then
         if Settings.flyMode == "V1" then
-            local moveDir = humanoid.MoveDirection
-            bodyVelocity.Velocity = moveDir * Settings.currentFlySpeed
-        else -- V2
-            if Settings.wPressed then
-                local lookVector = Camera.CFrame.LookVector
-                bodyVelocity.Velocity = lookVector * Settings.flySpeedV2
-            else
-                bodyVelocity.Velocity = Vector3.new(0,0,0)
-            end
+            bodyVelocity.Velocity = humanoid.MoveDirection * 60
+        elseif Settings.flyMode == "V2" then
+            bodyVelocity.Velocity = w and Camera.CFrame.LookVector * Settings.flySpeedV2 or Vector3.new(0,0,0)
+        elseif Settings.flyMode == "V3" then
+            local cf = Camera.CFrame
+            local move = Vector3.new(0,0,0)
+            if w then move = move + cf.LookVector end
+            if s then move = move - cf.LookVector end
+            if d then move = move + cf.RightVector end
+            if a then move = move - cf.RightVector end
+            if space then move = move + cf.UpVector end
+            if shift then move = move - cf.UpVector end
+            bodyVelocity.Velocity = move.Unit * Settings.flySpeedV2
         end
     end
 end)
 
--- ========== SHOTGUN MODE ==========
-local shotgunConnection = nil
-local lastShotgunUpdate = 0
+local function applyNoclip(state)
+    if not character then return end
+    for _,v in ipairs(character:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = not state end end
+end
+local function toggleNoclip(s) Settings.noclipEnabled = s; applyNoclip(s) end
+local function toggleInfJump(s) Settings.infJumpEnabled = s end
+UserInputService.InputBegan:Connect(function(inp,gp)
+    if gp then return end
+    if inp.KeyCode == Enum.KeyCode.Space and Settings.infJumpEnabled and humanoid then
+        local state = humanoid:GetState()
+        if state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping then
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+            if root then root.Velocity = Vector3.new(root.Velocity.X, Settings.infJumpPower, root.Velocity.Z) end
+        end
+    end
+end)
 
+-- ==================== SHOTGUN, DAGGER ====================
+local lastShotgunUpdate = 0
 local function shotgunLoop()
     if not Settings.shotgunModeEnabled then return end
     if not character or not character.Parent or humanoid.Health <= 0 then return end
-
     local now = tick()
     if now - lastShotgunUpdate < Settings.shotgunUpdateRate then return end
     lastShotgunUpdate = now
-
-    local _, targetPart = findNearestTarget()
-    if not targetPart then return end
-
-    local myRoot = character and character:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return end
-
-    local targetPos = targetPart.Position
-    local newPos = targetPos - Vector3.new(0, Settings.shotgunTPDistance, 0)
-    myRoot.CFrame = CFrame.new(newPos)
+    local _, part = findBestTarget()
+    if part then
+        local myRoot = character:FindFirstChild("HumanoidRootPart")
+        if myRoot then
+            myRoot.CFrame = CFrame.new(part.Position - Vector3.new(0, Settings.shotgunTPDistance, 0))
+        end
+    end
 end
-
 RunService.Heartbeat:Connect(shotgunLoop)
 
--- ========== GOOD MODE LOOP (ЦИКЛ ЛИВА) ==========
-RunService.Heartbeat:Connect(function()
-    if Settings.goodModeEnabled and character then
-        if not Settings.goodModeTimerRef then
-            Settings.goodModeTimerRef = tick()
-        end
-        local now = tick()
-        local elapsed = now - Settings.goodModeTimerRef
-        Settings.goodModeTimer = Settings.goodModeTimer + elapsed
-        Settings.goodModeTimerRef = now
-
-        if Settings.goodModeState == "invisible" and Settings.goodModeTimer >= Settings.goodModeInvisibleTime then
-            -- Переключаем в видимое состояние
-            Settings.goodModeState = "visible"
-            Settings.goodModeTimer = 0
-            -- Делаем персонажа видимым и убираем ForceField
-            for _, v in ipairs(character:GetDescendants()) do
-                if v:IsA("BasePart") then
-                    v.Transparency = 0
+local function daggerLoop()
+    if not Settings.daggerModeEnabled then return end
+    if not character or humanoid.Health <= 0 then return end
+    local myRoot = character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and isEnemy(plr) and plr.Character then
+            local targetRoot = plr.Character:FindFirstChild("HumanoidRootPart")
+            local targetHum = plr.Character:FindFirstChild("Humanoid")
+            if targetRoot and targetHum and targetHum.Health > 0 then
+                local dist = (targetRoot.Position - myRoot.Position).Magnitude
+                if dist < Settings.daggerParryDistance then
+                    local state = targetHum:GetState()
+                    if state == Enum.HumanoidStateType.Attacking or state == Enum.HumanoidStateType.Swimming then
+                        VirtualInputManager:SendKeyEvent(true, Settings.daggerParryKey, false, game)
+                        task.wait(0.05)
+                        VirtualInputManager:SendKeyEvent(false, Settings.daggerParryKey, false, game)
+                        task.wait(0.2)
+                    end
                 end
             end
-            if Settings.goodModeForceField then
-                Settings.goodModeForceField:Destroy()
-                Settings.goodModeForceField = nil
-            end
-        elseif Settings.goodModeState == "visible" and Settings.goodModeTimer >= Settings.goodModeVisibleTime then
-            -- Переключаем в невидимое состояние
-            Settings.goodModeState = "invisible"
-            Settings.goodModeTimer = 0
-            -- Делаем персонажа невидимым и добавляем ForceField
-            for _, v in ipairs(character:GetDescendants()) do
-                if v:IsA("BasePart") then
-                    v.Transparency = 1
+        end
+    end
+end
+RunService.Heartbeat:Connect(daggerLoop)
+
+-- ==================== TELEPORT ====================
+local tpConnection = nil
+local function getNearestEnemy()
+    local myRoot = character and character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
+    local nearest, nearestDist = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and isEnemy(plr) then
+            local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+            local hum = plr.Character and plr.Character:FindFirstChild("Humanoid")
+            if root and hum and hum.Health > 0 then
+                local dist = (root.Position - myRoot.Position).Magnitude
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearest = root
                 end
             end
-            if not Settings.goodModeForceField then
-                local ff = Instance.new("ForceField")
-                ff.Name = "GoodModeForceField"
-                ff.Visible = false
-                ff.Parent = character
-                Settings.goodModeForceField = ff
+        end
+    end
+    return nearest
+end
+local function teleportToEnemy()
+    local target = getNearestEnemy()
+    if not target then return end
+    local myRoot = character and character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+    local offset
+    if Settings.tpPosition == "Front" then offset = target.CFrame.LookVector * Settings.tpDistance
+    elseif Settings.tpPosition == "Back" then offset = -target.CFrame.LookVector * Settings.tpDistance
+    elseif Settings.tpPosition == "Up" then offset = Vector3.new(0, Settings.tpDistance, 0)
+    elseif Settings.tpPosition == "Down" then offset = Vector3.new(0, -Settings.tpDistance, 0)
+    else offset = Vector3.new(0,0,0) end
+    myRoot.CFrame = CFrame.new(target.Position + offset)
+end
+local function startTP() if tpConnection then tpConnection:Disconnect() end; tpConnection = RunService.Heartbeat:Connect(teleportToEnemy) end
+local function stopTP() if tpConnection then tpConnection:Disconnect(); tpConnection=nil end end
+local function toggleTP(s) Settings.tpEnabled = s; if s then startTP() else stopTP() end end
+local randomTPConnection = nil
+local randomTPActive = false
+local function teleportRandom()
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if root then root.CFrame = root.CFrame + Vector3.new((math.random()-0.5)*2000, (math.random()-0.5)*2000, (math.random()-0.5)*2000) end
+end
+local function toggleRandomTP(s) randomTPActive = s; if s then if randomTPConnection then randomTPConnection:Disconnect() end; randomTPConnection = RunService.Heartbeat:Connect(function() if randomTPActive then teleportRandom(); task.wait(0.1) end end) else if randomTPConnection then randomTPConnection:Disconnect(); randomTPConnection=nil end end end
+local function teleportDown() local root = character and character:FindFirstChild("HumanoidRootPart"); if root then root.CFrame = root.CFrame + Vector3.new(0,-1000,0) end end
+
+-- ==================== ESP ====================
+local espBillboards = {}
+local function removeBillboard(plr) if espBillboards[plr] then espBillboards[plr]:Destroy(); espBillboards[plr]=nil end end
+local function createBillboard(plr)
+    if plr == player then return end
+    removeBillboard(plr)
+    local function attach(char)
+        if not char then return end
+        local head = char:FindFirstChild("Head")
+        local hum = char:FindFirstChild("Humanoid")
+        if not head or not hum then return end
+        local bill = Instance.new("BillboardGui")
+        bill.Size = UDim2.new(0,100,0,25)
+        bill.StudsOffset = Vector3.new(0,2.5,0)
+        bill.AlwaysOnTop = true
+        bill.Parent = head
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1,0,0.5,0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = plr.Name
+        nameLabel.TextColor3 = Color3.new(1,1,1)
+        nameLabel.TextStrokeTransparency = 0.5
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextScaled = true
+        nameLabel.Parent = bill
+        local healthBar = Instance.new("Frame")
+        healthBar.Size = UDim2.new(1,0,0.3,0)
+        healthBar.Position = UDim2.new(0,0,0.5,0)
+        healthBar.BackgroundColor3 = Color3.new(0,1,0)
+        healthBar.BorderSizePixel = 0
+        healthBar.Parent = bill
+        local healthFill = Instance.new("Frame")
+        healthFill.Size = UDim2.new(1,0,1,0)
+        healthFill.BackgroundColor3 = Color3.new(0,1,0)
+        healthFill.BorderSizePixel = 0
+        healthFill.Parent = healthBar
+        local function updateHealth() local p = hum.Health/hum.MaxHealth; healthFill.Size = UDim2.new(p,0,1,0); healthFill.BackgroundColor3 = Color3.new(1-p,p,0) end
+        updateHealth()
+        hum.HealthChanged:Connect(updateHealth)
+        local function updateVis()
+            if not Settings.espEnabled then bill.Enabled = false return end
+            if not Settings.espName and not Settings.espHealth then bill.Enabled = false return end
+            local myRoot = character and character:FindFirstChild("HumanoidRootPart")
+            if myRoot then
+                local dist = (head.Position - myRoot.Position).Magnitude
+                if dist > Settings.espDistance then bill.Enabled = false return end
+            end
+            bill.Enabled = true
+            nameLabel.Visible = Settings.espName
+            healthBar.Visible = Settings.espHealth
+        end
+        updateVis()
+        local conn = RunService.Heartbeat:Connect(updateVis)
+        hum.Died:Connect(function() bill:Destroy(); conn:Disconnect() end)
+        espBillboards[plr] = bill
+    end
+    if plr.Character then attach(plr.Character) end
+    plr.CharacterAdded:Connect(attach)
+    plr.CharacterRemoving:Connect(function() removeBillboard(plr) end)
+end
+local function toggleESP(s)
+    Settings.espEnabled = s
+    if s then
+        for _,plr in ipairs(Players:GetPlayers()) do if plr~=player then createBillboard(plr) end end
+        Players.PlayerAdded:Connect(function(plr) if plr~=player then createBillboard(plr) end end)
+    else
+        for plr,bill in pairs(espBillboards) do if bill then bill:Destroy() end end
+        espBillboards = {}
+    end
+end
+
+-- ==================== TRACERS ====================
+local drawingSupported = pcall(Drawing.new, "Text")
+if drawingSupported then
+    local function getStart()
+        if Settings.tracerOrigin=="Gun" then
+            local tool = character:FindFirstChildOfClass("Tool")
+            if tool then
+                local handle = tool:FindFirstChild("Handle") or tool:FindFirstChild("Grip")
+                if handle then return handle.Position end
+            end
+            local head = character:FindFirstChild("Head")
+            if head then return head.Position end
+        elseif Settings.tracerOrigin=="Head" then
+            local head = character:FindFirstChild("Head")
+            if head then return head.Position end
+        elseif Settings.tracerOrigin=="Camera" then
+            return Camera.CFrame.Position
+        end
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        return root and root.Position+Vector3.new(0,1,0) or Vector3.new(0,0,0)
+    end
+    UserInputService.InputBegan:Connect(function(inp,gp)
+        if gp then return end
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 and Settings.tracerEnabled then
+            local start = getStart()
+            if start and Camera then
+                local line = Drawing.new("Line")
+                line.From = start
+                line.To = start + Camera.CFrame.LookVector * Settings.tracerLength
+                line.Color = Settings.tracerColor
+                line.Thickness = 2
+                line.Transparency = 1
+                line.Visible = true
+                task.delay(Settings.tracerDuration, function() line:Remove() end)
             end
         end
-    else
-        Settings.goodModeTimerRef = nil
-    end
-end)
-
--- ========== INF JUMP ==========
-local function toggleInfJump()
-    Settings.infJumpEnabled = not Settings.infJumpEnabled
-    if Settings.infJumpEnabled then
-        gui.infJumpButton.Text = "Inf Jump: ВКЛ"
-        gui.infJumpButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        updateStatus("Inf Jump активирован")
-    else
-        gui.infJumpButton.Text = "Inf Jump: ВЫКЛ"
-        gui.infJumpButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        updateStatus("Inf Jump деактивирован")
-    end
+    end)
 end
 
--- ========== SPEED TOGGLE ==========
-local function toggleSpeed()
-    Settings.speedEnabled = not Settings.speedEnabled
-    if Settings.speedEnabled then
-        gui.speedToggleButton.Text = "Speed: ВКЛ"
-        gui.speedToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        applySpeedState()
-        updateStatus("Ускорение включено (скорость " .. Settings.currentSpeed .. ")")
-    else
-        gui.speedToggleButton.Text = "Speed: ВЫКЛ"
-        gui.speedToggleButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        removeSpeedController()
-        updateStatus("Ускорение выключено")
-    end
-end
-
--- ========== NOCLIP ==========
-local function applyNoclip(state)
-    if not character then return end
-    for _, v in ipairs(character:GetDescendants()) do
-        if v:IsA("BasePart") then
-            v.CanCollide = not state
-        end
-    end
-end
-
-local function toggleNoclip()
-    Settings.noclipEnabled = not Settings.noclipEnabled
-    applyNoclip(Settings.noclipEnabled)
-    if Settings.noclipEnabled then
-        gui.noclipButton.Text = "Noclip: ВКЛ"
-        gui.noclipButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        updateStatus("Noclip активирован")
-    else
-        gui.noclipButton.Text = "Noclip: ВЫКЛ"
-        gui.noclipButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-        updateStatus("Noclip деактивирован")
-    end
-end
-
--- ========== DEVICE SPOOFIER ==========
+-- ==================== DEVICE SPOOF ====================
 local function setDevice(dev)
     local success = false
     local playerGui = player:FindFirstChild("PlayerGui")
     if playerGui then
-        for _, obj in ipairs(playerGui:GetDescendants()) do
-            if obj:IsA("StringValue") and obj.Name:lower():find("device") then
-                obj.Value = dev
-                success = true
-                break
-            end
+        for _,obj in ipairs(playerGui:GetDescendants()) do
+            if obj:IsA("StringValue") and obj.Name:lower():find("device") then obj.Value=dev; success=true; break end
         end
     end
     if not success then
         local backpack = player:FindFirstChild("Backpack")
         if backpack then
-            for _, obj in ipairs(backpack:GetDescendants()) do
-                if obj:IsA("StringValue") and obj.Name:lower():find("device") then
-                    obj.Value = dev
-                    success = true
-                    break
-                end
+            for _,obj in ipairs(backpack:GetDescendants()) do
+                if obj:IsA("StringValue") and obj.Name:lower():find("device") then obj.Value=dev; success=true; break end
             end
         end
     end
     if not success and playerGui then
-        local newDevice = Instance.new("StringValue")
-        newDevice.Name = "Device"
-        newDevice.Value = dev
-        newDevice.Parent = playerGui
+        local new = Instance.new("StringValue")
+        new.Name = "Device"
+        new.Value = dev
+        new.Parent = playerGui
         success = true
     end
-    if not success then
-        player:SetAttribute("Device", dev)
-        success = true
-    end
-
-    if success then
-        gui.deviceLabel.Text = "Device: " .. dev
-        updateStatus("Устройство установлено: " .. dev)
-    else
-        updateStatus("Не удалось найти устройство.")
-    end
-    return success
+    if not success then player:SetAttribute("Device", dev) end
 end
+local function setDeviceIndex(idx) if idx<1 then idx=#Settings.devices end; if idx>#Settings.devices then idx=1 end; if setDevice(Settings.devices[idx]) then Settings.deviceIndex=idx end end
 
-local function nextDevice()
-    local newIndex = (Settings.deviceIndex % #Settings.devices) + 1
-    if setDevice(Settings.devices[newIndex]) then
-        Settings.deviceIndex = newIndex
-    end
-end
-
-local function prevDevice()
-    local newIndex = Settings.deviceIndex - 1
-    if newIndex < 1 then newIndex = #Settings.devices end
-    if setDevice(Settings.devices[newIndex]) then
-        Settings.deviceIndex = newIndex
-    end
-end
-
--- ========== ЭКСТРЕННОЕ ОТКЛЮЧЕНИЕ ==========
-local function emergencyStop()
-    if screenGui then screenGui:Destroy() end
-    if statusGui then statusGui:Destroy() end
-    if aimbotConnection then aimbotConnection:Disconnect() end
-    if cameraConnection then cameraConnection:Disconnect() end
-    if triggerbotConnection then triggerbotConnection:Disconnect() end
-    if tpConnection then tpConnection:Disconnect() end
-    removeSpeedController()
-    if bodyVelocity then bodyVelocity:Destroy() end
-    if Settings.goodModeForceField then Settings.goodModeForceField:Destroy() end
-    updateStatus("Экстренное отключение")
-    script:Destroy()
-end
-
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.P then
-        emergencyStop()
-    end
-end)
-
--- ========== ОБРАБОТКА КЛАВИШ ==========
-local function onRPressed()
-    if gui.mainFrame then
-        gui.mainFrame.Visible = not gui.mainFrame.Visible
-        if gui.mainFrame.Visible then
-            updateStatus("Меню открыто")
-            -- обновить позиции ползунков
-            local walkRatio = (Settings.currentSpeed - Settings.minSpeed) / (Settings.maxSpeed - Settings.minSpeed)
-            gui.thumb.Position = UDim2.new(walkRatio, -6, 0.5, -6)
-            local flyRatio = (Settings.currentFlySpeed - Settings.minFlySpeed) / (Settings.maxFlySpeed - Settings.minFlySpeed)
-            gui.flyThumb.Position = UDim2.new(flyRatio, -6, 0.5, -6)
-            local espDistRatio = (Settings.espDistance - 10) / (5000 - 10)
-            gui.espDistThumb.Position = UDim2.new(espDistRatio, -6, 0.5, -6)
-            local aimDistRatio = (Settings.aimbotDistance - Settings.minAimbotDist) / (Settings.maxAimbotDist - Settings.minAimbotDist)
-            gui.aimDistThumb.Position = UDim2.new(aimDistRatio, -6, 0.5, -6)
-            local triggerRatio = (Settings.currentTriggerDelay - Settings.minTriggerDelay) / (Settings.maxTriggerDelay - Settings.minTriggerDelay)
-            gui.triggerDelayThumb.Position = UDim2.new(triggerRatio, -6, 0.5, -6)
-            local tpDistRatio = (Settings.tpDistance - 1) / (10 - 1)
-            gui.tpDistThumb.Position = UDim2.new(tpDistRatio, -6, 0.5, -6)
-        else
-            updateStatus("Меню закрыто")
-        end
-    end
-end
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.R then
-        onRPressed()
-    elseif input.KeyCode == Enum.KeyCode.F then
-        toggleAimbot()
-    elseif input.KeyCode == Enum.KeyCode.T then
-        toggleTriggerbot()
-    elseif input.KeyCode == Enum.KeyCode.Space then
-        if Settings.infJumpEnabled and humanoid then
-            local state = humanoid:GetState()
-            if state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping then
-                local root = character and character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    root.Velocity = Vector3.new(root.Velocity.X, Settings.infJumpPower, root.Velocity.Z)
+-- ==================== SKIN CHANGER ====================
+local weaponModels = player.PlayerScripts.Assets.ViewModels.Weapons:GetChildren()
+local wrapTextures = player.PlayerScripts.Assets.WrapTextures:GetChildren()
+local wrapMaterials = MaterialService.Wraps:GetChildren()
+local weaponNames = {} for _,v in ipairs(weaponModels) do table.insert(weaponNames, v.Name) end
+local wrapTextureNames = {} local filteredWraps = {} local wrapMaterialNames = {} local wrapVariantList = {}
+for _,v in ipairs(wrapTextures) do wrapTextureNames[v.Name]=true end
+for _,v in ipairs(wrapMaterials) do wrapMaterialNames[v.Name]=v; if not wrapTextureNames[v.Name] then table.insert(wrapVariantList, v.Name) end end
+for _,v in ipairs(wrapTextures) do if not wrapMaterialNames[v.Name] then table.insert(filteredWraps, v.Name) end end
+local materialList = {} for _,v in pairs(Enum.Material:GetEnumItems()) do table.insert(materialList, v.Name) end
+local function applyWeaponSkin(wn, col, trans, mat, wrapTex, wrapMat, ref, useCol, useTrans, useMat, useWrapTex, useWrapMat, applyAll)
+    local weapons = applyAll and weaponModels or {}
+    if not applyAll then for _,v in ipairs(weaponModels) do if v.Name==wn then table.insert(weapons, v) end end end
+    for _,model in ipairs(weapons) do
+        for _,part in ipairs(model:GetDescendants()) do
+            if part:IsA("BasePart") and part.Transparency~=1 then
+                if useCol then part.Color = col end
+                if useTrans then part.Transparency = trans end
+                part.Reflectance = ref
+                if useWrapMat and wrapMat then
+                    part.Material = Enum.Material.Fabric
+                    part.MaterialVariant = wrapMat.Name
+                    for _,child in ipairs(part:GetChildren()) do if child:IsA("Texture") or child:IsA("Decal") or child:IsA("SurfaceAppearance") then child:Destroy() end end
+                else
+                    if useMat then part.Material = mat end
+                    part.MaterialVariant = ""
+                    if useWrapTex and wrapTex then
+                        for _,child in ipairs(part:GetChildren()) do if child:IsA("Texture") or child:IsA("Decal") or child:IsA("SurfaceAppearance") then child:Destroy() end end
+                        for _,w in ipairs(wrapTextures) do if w.Name==wrapTex then for _,c in ipairs(w:GetChildren()) do if c:IsA("Decal") or c:IsA("Texture") or c:IsA("SurfaceAppearance") then c:Clone().Parent=part end end break end end
+                    end
                 end
             end
         end
     end
-end)
+end
 
-ContextActionService:BindAction("ToggleMenu", function(_, state)
-    if state == Enum.UserInputState.Begin then
-        onRPressed()
+-- ==================== GUI FLUENT ====================
+Fluent:SetTheme("Dark")
+local Window = Fluent:CreateWindow({
+    Title = "Xeno Rivals",
+    SubTitle = "Ultimate (Billboard ESP)",
+    TabWidth = 120,
+    Size = UDim2.fromOffset(500, 420),
+    Acrylic = false,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.RightShift
+})
+local Tabs = {
+    Aimbot = Window:AddTab({ Title = "Aimbot", Icon = "crosshair" }),
+    Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
+    Player = Window:AddTab({ Title = "Player", Icon = "user" }),
+    Teleport = Window:AddTab({ Title = "Teleport", Icon = "location-dot" }),
+    Misc = Window:AddTab({ Title = "Misc", Icon = "sliders" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "gear" })
+}
+
+-- Aimbot Tab
+local aimSec = Tabs.Aimbot:AddSection("Aimbot")
+aimSec:AddToggle("aimbotToggle", {Title="Aimbot", Default=Settings.aimbotEnabled, Callback=toggleAimbot})
+aimSec:AddToggle("aimbotRMBToggle", {Title="Aimbot on RMB Hold", Default=Settings.aimbotOnRMB, Callback=function(v) Settings.aimbotOnRMB=v end})
+aimSec:AddSlider("aimbotDistSlider", {Title="Distance", Min=10, Max=10000, Default=Settings.aimbotDistance, Rounding=0, Callback=function(v) Settings.aimbotDistance=v end})
+aimSec:AddSlider("aimbotStrengthSlider", {Title="Smoothness", Min=0.1, Max=1, Default=Settings.aimbotSmoothness, Precision=2, Rounding=2, Callback=function(v) Settings.aimbotSmoothness=v end})
+aimSec:AddDropdown("aimPartDropdown", {Title="Aim Part", Values={"Head","Torso"}, Default=Settings.aimbotTargetPart=="Head" and 1 or 2, Callback=function(v) Settings.aimbotTargetPart=v end})
+aimSec:AddToggle("wallCheckToggle", {Title="Wall Check", Default=Settings.aimbotIgnoreWalls, Callback=function(v) Settings.aimbotIgnoreWalls=v end})
+aimSec:AddToggle("teamCheckToggle", {Title="Team Check", Default=Settings.teamCheck, Callback=function(v) Settings.teamCheck=v end})
+aimSec:AddToggle("antiKatanaToggle", {Title="Anti-Katana", Default=Settings.antiKatana, Callback=function(v) Settings.antiKatana=v end})
+aimSec:AddToggle("priorityEnableToggle", {Title="Enable Priority Mode", Default=Settings.aimbotPriorityEnabled, Callback=function(v) Settings.aimbotPriorityEnabled=v end})
+aimSec:AddDropdown("priorityDropdown", {Title="Priority Type", Values={"Closest","LowHealth","HighHealth","Random"}, Default=1, Callback=function(v) Settings.aimbotPriority=v end})
+aimSec:AddToggle("randomPartToggle", {Title="Random Hit Part", Default=Settings.aimbotRandomPart, Callback=function(v) Settings.aimbotRandomPart=v end})
+aimSec:AddSlider("headChanceSlider", {Title="Head Chance (%)", Min=0, Max=100, Default=Settings.aimbotHeadChance, Rounding=0, Callback=function(v) Settings.aimbotHeadChance=v end})
+aimSec:AddToggle("stayOnTargetToggle", {Title="Stay on target after kill", Default=Settings.aimbotStayOnTarget, Callback=function(v) Settings.aimbotStayOnTarget=v end})
+aimSec:AddButton({Title="Add to Whitelist", Callback=function()
+    local target,_ = getTargetFromCam()
+    if target then _G.XenoWhitelist[target.Name]=true updateStatus("Whitelist + "..target.Name) else updateStatus("No target") end
+end})
+
+local trigSec = Tabs.Aimbot:AddSection("Triggerbot")
+trigSec:AddToggle("triggerbotToggle", {Title="Triggerbot", Default=Settings.triggerbotEnabled, Callback=toggleTriggerbot})
+trigSec:AddSlider("triggerDelaySlider", {Title="Delay (ms)", Min=50, Max=500, Default=Settings.currentTriggerDelay, Rounding=0, Callback=function(v) Settings.currentTriggerDelay=v end})
+
+local rageSec = Tabs.Aimbot:AddSection("Rage Bot")
+rageSec:AddToggle("rageBotToggle", {Title="Rage Bot (Master)", Default=Settings.rageBotEnabled, Callback=toggleRageBot})
+rageSec:AddToggle("rageAimbotToggle", {Title="Aimbot (in Rage)", Default=Settings.rageAimbot, Callback=function(v) Settings.rageAimbot=v; if Settings.rageBotEnabled then applyRage() end end})
+rageSec:AddToggle("rageTriggerbotToggle", {Title="Triggerbot (in Rage)", Default=Settings.rageTriggerbot, Callback=function(v) Settings.rageTriggerbot=v; if Settings.rageBotEnabled then applyRage() end end})
+rageSec:AddToggle("rageWallPenToggle", {Title="Shoot through walls", Default=Settings.rageWallPen, Callback=function(v) Settings.rageWallPen=v; if Settings.rageBotEnabled then applyRage() end end})
+rageSec:AddToggle("rageSwitchEmptyToggle", {Title="Switch to secondary on empty", Default=Settings.rageSwitchOnEmpty, Callback=function(v) Settings.rageSwitchOnEmpty=v end})
+rageSec:AddSlider("rageShootDelaySlider", {Title="Shoot delay (ms)", Min=0, Max=1000, Default=Settings.rageShootDelay, Rounding=0, Callback=function(v) Settings.rageShootDelay=v end})
+rageSec:AddDropdown("rageHitPartDropdown", {Title="Hit part", Values={"Head","Torso"}, Default=Settings.rageHitPart=="Head" and 1 or 2, Callback=function(v) Settings.rageHitPart=v end})
+
+local specSec = Tabs.Aimbot:AddSection("Special Modes")
+specSec:AddToggle("shotgunToggle", {Title="Shotgun Mode", Default=Settings.shotgunModeEnabled, Callback=function(v) Settings.shotgunModeEnabled=v end})
+specSec:AddSlider("shotgunTPSlider", {Title="Shotgun TP Dist", Min=1, Max=10, Default=Settings.shotgunTPDistance, Rounding=1, Callback=function(v) Settings.shotgunTPDistance=v end})
+specSec:AddToggle("daggerToggle", {Title="Dagger Mode", Default=Settings.daggerModeEnabled, Callback=function(v) Settings.daggerModeEnabled=v end})
+specSec:AddSlider("daggerDistSlider", {Title="Parry Distance", Min=5, Max=30, Default=Settings.daggerParryDistance, Rounding=1, Callback=function(v) Settings.daggerParryDistance=v end})
+
+-- Visuals Tab
+local espSec = Tabs.Visuals:AddSection("ESP (Billboard)")
+espSec:AddToggle("espToggle", {Title="ESP", Default=Settings.espEnabled, Callback=toggleESP})
+espSec:AddSlider("espDistSlider", {Title="Distance", Min=100, Max=5000, Default=Settings.espDistance, Rounding=0, Callback=function(v) Settings.espDistance=v end})
+espSec:AddToggle("espNameToggle", {Title="Show Name", Default=Settings.espName, Callback=function(v) Settings.espName=v end})
+espSec:AddToggle("espHealthToggle", {Title="Show Health Bar", Default=Settings.espHealth, Callback=function(v) Settings.espHealth=v end})
+
+local tracerSec = Tabs.Visuals:AddSection("Tracers (Drawing)")
+tracerSec:AddToggle("tracerToggle", {Title="Tracers", Default=Settings.tracerEnabled, Callback=function(v) Settings.tracerEnabled=v end})
+tracerSec:AddDropdown("tracerOriginDropdown", {Title="Origin", Values={"Gun","Head","Camera"}, Default=Settings.tracerOrigin=="Gun" and 1 or Settings.tracerOrigin=="Head" and 2 or 3, Callback=function(v) Settings.tracerOrigin=v end})
+tracerSec:AddSlider("tracerLengthSlider", {Title="Length", Min=100, Max=1000, Default=Settings.tracerLength, Rounding=0, Callback=function(v) Settings.tracerLength=v end})
+tracerSec:AddColorpicker("tracerColorPicker", {Title="Color", Default=Settings.tracerColor, Callback=function(v) Settings.tracerColor=v end})
+
+local effectsSec = Tabs.Visuals:AddSection("Effects")
+effectsSec:AddToggle("noFlashToggle", {Title="No Flash", Default=Settings.noFlash, Callback=function(v) Settings.noFlash=v end})
+effectsSec:AddToggle("noSmokeToggle", {Title="No Smoke", Default=Settings.noSmoke, Callback=function(v) Settings.noSmoke=v end})
+effectsSec:AddToggle("noRecoilToggle", {Title="No Recoil", Default=Settings.noRecoil, Callback=function(v) Settings.noRecoil=v end})
+effectsSec:AddToggle("noSpreadToggle", {Title="No Spread", Default=Settings.noSpread, Callback=function(v) Settings.noSpread=v end})
+
+-- Player Tab
+local moveSec = Tabs.Player:AddSection("Movement")
+moveSec:AddToggle("speedToggle", {Title="Speed", Default=Settings.speedEnabled, Callback=toggleSpeed})
+moveSec:AddSlider("speedSlider", {Title="Walk Speed", Min=8, Max=120, Default=Settings.currentSpeed, Rounding=1, Callback=function(v) Settings.currentSpeed=v end})
+moveSec:AddToggle("flyToggle", {Title="Fly", Default=Settings.isFlying, Callback=setFlightState})
+moveSec:AddDropdown("flyModeDropdown", {Title="Fly Mode", Values={"V1","V2","V3"}, Default=Settings.flyMode=="V1" and 1 or Settings.flyMode=="V2" and 2 or 3, Callback=function(v) Settings.flyMode=v end})
+moveSec:AddSlider("flySpeedSlider", {Title="Fly Speed V2/V3", Min=1, Max=1000, Default=Settings.flySpeedV2, Rounding=1, Callback=function(v) Settings.flySpeedV2=v end})
+moveSec:AddToggle("noclipToggle", {Title="Noclip", Default=Settings.noclipEnabled, Callback=toggleNoclip})
+moveSec:AddToggle("infJumpToggle", {Title="Infinite Jump", Default=Settings.infJumpEnabled, Callback=toggleInfJump})
+
+-- Teleport Tab
+local tpSec = Tabs.Teleport:AddSection("Auto Teleport")
+tpSec:AddToggle("tpToggle", {Title="Auto TP", Default=Settings.tpEnabled, Callback=toggleTP})
+tpSec:AddSlider("tpDistanceSlider", {Title="Distance", Min=1, Max=10, Default=Settings.tpDistance, Rounding=1, Callback=function(v) Settings.tpDistance=v end})
+tpSec:AddDropdown("tpPositionDropdown", {Title="Position", Values={"Front","Back","Up","Down"}, Default=1, Callback=function(v) Settings.tpPosition=v end})
+local randSec = Tabs.Teleport:AddSection("Random Teleport")
+randSec:AddToggle("randomTPToggle", {Title="Random TP", Default=randomTPActive, Callback=toggleRandomTP})
+local extraSec = Tabs.Teleport:AddSection("Extra")
+extraSec:AddButton({Title="TP 1000 Down", Callback=teleportDown})
+
+-- Misc Tab
+local devSec = Tabs.Misc:AddSection("Device & AutoRun")
+devSec:AddDropdown("deviceDropdown", {Title="Device Spoof", Values=Settings.devices, Default=Settings.deviceIndex, Callback=function(v)
+    for i,name in ipairs(Settings.devices) do if name==v then setDeviceIndex(i) break end end
+end})
+devSec:AddToggle("autoRunToggle", {Title="AutoRun", Description="Enable all main features", Default=Settings.autoRunEnabled, Callback=function(state)
+    Settings.autoRunEnabled = state
+    if state then
+        if not Settings.aimbotEnabled then toggleAimbot(true) end
+        if not Settings.triggerbotEnabled then toggleTriggerbot(true) end
+        if not Settings.espEnabled then toggleESP(true) end
+        if not Settings.speedEnabled then toggleSpeed(true) end
+        if not Settings.isFlying then setFlightState(true) end
+        if not Settings.noclipEnabled then toggleNoclip(true) end
+        if not Settings.infJumpEnabled then toggleInfJump(true) end
+        updateStatus("AutoRun ON")
+    else
+        if Settings.aimbotEnabled then toggleAimbot(false) end
+        if Settings.triggerbotEnabled then toggleTriggerbot(false) end
+        if Settings.espEnabled then toggleESP(false) end
+        if Settings.speedEnabled then toggleSpeed(false) end
+        if Settings.isFlying then setFlightState(false) end
+        if Settings.noclipEnabled then toggleNoclip(false) end
+        if Settings.infJumpEnabled then toggleInfJump(false) end
+        updateStatus("AutoRun OFF")
     end
-end, false, Enum.KeyCode.R)
+end})
 
--- ========== КНОПКИ МЫШИ ==========
-gui.closeButton.MouseButton1Click:Connect(function() gui.mainFrame.Visible = false end)
-gui.flyToggleButton.MouseButton1Click:Connect(toggleFlight)
-gui.infJumpButton.MouseButton1Click:Connect(toggleInfJump)
-gui.speedToggleButton.MouseButton1Click:Connect(toggleSpeed)
-gui.noclipButton.MouseButton1Click:Connect(toggleNoclip)
-gui.espButton.MouseButton1Click:Connect(toggleESP)
-gui.tpMenuButton.MouseButton1Click:Connect(function() gui.tpMenu.Visible = not gui.tpMenu.Visible end)
-gui.aimSettingsButton.MouseButton1Click:Connect(function() gui.aimSettingsMenu.Visible = not gui.aimSettingsMenu.Visible end)
+local skinSec = Tabs.Misc:AddSection("Skin Changer")
+local weaponDropdown = skinSec:AddDropdown("weaponDropdown", {Title="Weapon", Values=weaponNames, Default=1})
+local wrapDropdown = skinSec:AddDropdown("wrapDropdown", {Title="Wrap Texture", Values=filteredWraps, Default=#filteredWraps>0 and 1 or nil})
+local materialDropdown = skinSec:AddDropdown("materialDropdown", {Title="Material", Values=materialList, Default=1})
+local wrapMaterialDropdown = skinSec:AddDropdown("wrapMaterialDropdown", {Title="Wrap Material", Values=wrapVariantList, Default=#wrapVariantList>0 and 1 or nil})
+local colorPicker = skinSec:AddColorpicker("skinColorPicker", {Title="Color", Transparency=0, Default=Color3.fromRGB(255,255,255)})
+local reflectanceSlider = skinSec:AddSlider("reflectanceSlider", {Title="Reflectance", Min=0, Max=1, Default=0, Rounding=2, Callback=function(v) end})
+local applyAllToggle = skinSec:AddToggle("applyAllToggle", {Title="Apply to all weapons", Default=false})
+local useColorToggle = skinSec:AddToggle("useColorToggle", {Title="Apply Color", Default=false})
+local useMaterialToggle = skinSec:AddToggle("useMaterialToggle", {Title="Apply Material", Default=false})
+local useWrapTextureToggle = skinSec:AddToggle("useWrapTextureToggle", {Title="Apply Wrap", Default=false})
+local useWrapMaterialToggle = skinSec:AddToggle("useWrapMaterialToggle", {Title="Use Wrap Material", Default=false})
+local useTransparencyToggle = skinSec:AddToggle("useTransparencyToggle", {Title="Apply Transparency", Default=false})
+local function applySkin()
+    applyWeaponSkin(weaponDropdown.Value, colorPicker.Value, 1-colorPicker.Alpha, Enum.Material[materialDropdown.Value], wrapDropdown.Value, wrapMaterialNames[wrapMaterialDropdown.Value], reflectanceSlider.Value, useColorToggle.Value, useTransparencyToggle.Value, useMaterialToggle.Value, useWrapTextureToggle.Value, useWrapMaterialToggle.Value, applyAllToggle.Value)
+end
+skinSec:AddButton({Title="Apply Skin", Callback=applySkin})
+skinSec:AddButton({Title="Randomize", Callback=function()
+    colorPicker:SetValue(Color3.fromRGB(math.random(0,255), math.random(0,255), math.random(0,255)))
+    colorPicker.Transparency = math.random()
+    reflectanceSlider:SetValue(math.random())
+    materialDropdown:SetValue(materialList[math.random(#materialList)])
+    if #filteredWraps>0 then wrapDropdown:SetValue(filteredWraps[math.random(#filteredWraps)]) end
+    if #wrapVariantList>0 then wrapMaterialDropdown:SetValue(wrapVariantList[math.random(#wrapVariantList)]) end
+    applySkin()
+end})
+skinSec:AddButton({Title="Remove Effects", Callback=function()
+    local sel = weaponDropdown.Value
+    for _,model in ipairs(weaponModels) do
+        if model.Name == sel then
+            for _,part in ipairs(model:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Material = Enum.Material.SmoothPlastic
+                    part.MaterialVariant = ""
+                    part.Reflectance = 0
+                    for _,child in ipairs(part:GetChildren()) do
+                        if child:IsA("Decal") or child:IsA("Texture") or child:IsA("SurfaceAppearance") then child:Destroy() end
+                    end
+                end
+            end
+        end
+    end
+end})
 
--- Кнопки подменю телепортации
-gui.tpToggleButton.MouseButton1Click:Connect(toggleTP)
-gui.tpFrontBtn.MouseButton1Click:Connect(function() setTPPosition("Front") end)
-gui.tpBackBtn.MouseButton1Click:Connect(function() setTPPosition("Back") end)
-gui.tpUpBtn.MouseButton1Click:Connect(function() setTPPosition("Up") end)
-gui.tpDownBtn.MouseButton1Click:Connect(function() setTPPosition("Down") end)
-gui.tp1000DownBtn.MouseButton1Click:Connect(teleport1000Down)
-gui.tpCloseBtn.MouseButton1Click:Connect(function() gui.tpMenu.Visible = false end)
+-- Settings Tab
+local setSec = Tabs.Settings:AddSection("General")
+setSec:AddToggle("autoLoadToggle", {Title="AutoLoad", Description="Restore functions after respawn", Default=Settings.autoLoadEnabled, Callback=function(state)
+    Settings.autoLoadEnabled = state
+    if state then
+        -- сохраняем состояния в атрибуты (для простоты оставим заглушку)
+        updateStatus("AutoLoad включён")
+    else
+        updateStatus("AutoLoad выключен")
+    end
+end})
 
--- Кнопки подменю аимбота
-gui.aimbotToggleButton.MouseButton1Click:Connect(toggleAimbot)
-gui.aimTargetButton.MouseButton1Click:Connect(toggleAimbotTarget)
-gui.teamCheckButton.MouseButton1Click:Connect(toggleTeamCheck)
-gui.triggerToggleButton.MouseButton1Click:Connect(toggleTriggerbot)
-gui.rageToggleButton.MouseButton1Click:Connect(toggleRageMode)
-gui.aimCloseBtn.MouseButton1Click:Connect(function() gui.aimSettingsMenu.Visible = false end)
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:SetFolder("XenoRivalsUltimate")
+InterfaceManager:SetFolder("XenoRivalsUltimate")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
 
--- Устройство
-gui.devicePrevButton.MouseButton1Click:Connect(prevDevice)
-gui.deviceNextButton.MouseButton1Click:Connect(nextDevice)
+Window:SelectTab(1)
 
--- ========== СМЕНА ПЕРСОНАЖА ==========
+-- ==================== АВТОВОССТАНОВЛЕНИЕ ====================
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
     humanoid = newChar:WaitForChild("Humanoid")
-    updateStatus("Персонаж обновлён")
-    gui.speedLabel.Text = "Скорость ходьбы: " .. Settings.currentSpeed
-    gui.flySpeedLabel.Text = "Скорость V1: " .. Settings.currentFlySpeed
-    gui.espDistLabel.Text = "ESP Distance: " .. Settings.espDistance
-    removeSpeedController()
     task.wait(0.5)
     applySpeedState()
-    if Settings.noclipEnabled then
-        applyNoclip(true)
-        newChar.DescendantAdded:Connect(function(desc)
-            if Settings.noclipEnabled and desc:IsA("BasePart") then
-                desc.CanCollide = false
-            end
-        end)
-    end
-    -- Восстанавливаем полёт, если был включён
-    if Settings.isFlying then
-        -- Небольшая задержка, чтобы корневая часть успела появиться
-        task.wait(0.1)
-        setFlightState(true)
-    end
-    if Settings.aimbotEnabled then
-        startAimbotLoop()
-    end
-    if Settings.triggerbotEnabled then
-        Settings.lastShotTime = 0
-        startTriggerbotLoop()
-    end
-    if Settings.tpEnabled then
-        stopTPLoop()
-        startTPLoop()
-    end
-    -- Восстанавливаем Good Mode
-    if Settings.goodModeEnabled then
-        Settings.goodModeTimer = 0
-        Settings.goodModeState = "invisible"
-        Settings.goodModeTimerRef = tick()
-        -- Применить невидимость
-        for _, v in ipairs(newChar:GetDescendants()) do
-            if v:IsA("BasePart") then
-                v.Transparency = 1
-            end
-        end
-        if not Settings.goodModeForceField then
-            local ff = Instance.new("ForceField")
-            ff.Name = "GoodModeForceField"
-            ff.Visible = false
-            ff.Parent = newChar
-            Settings.goodModeForceField = ff
-        end
+    if Settings.noclipEnabled then applyNoclip(true) end
+    if Settings.isFlying then setFlightState(true) end
+    if Settings.aimbotEnabled then startAimbot() end
+    if Settings.triggerbotEnabled then startTriggerbot() end
+    if Settings.tpEnabled then startTP() end
+    if randomTPActive then toggleRandomTP(true) end
+end)
+
+UserInputService.InputBegan:Connect(function(inp,gp)
+    if gp then return end
+    if inp.KeyCode == Enum.KeyCode.P then
+        if aimbotConnection then aimbotConnection:Disconnect() end
+        if cameraConnection then cameraConnection:Disconnect() end
+        if triggerbotConnection then triggerbotConnection:Disconnect() end
+        if tpConnection then tpConnection:Disconnect() end
+        if randomTPConnection then randomTPConnection:Disconnect() end
+        removeSpeed()
+        if bodyVelocity then bodyVelocity:Destroy() end
+        updateStatus("Экстренное отключение")
+        script:Destroy()
     end
 end)
 
-player.CharacterRemoving:Connect(function()
-    if Settings.isFlying then
-        if bodyVelocity then bodyVelocity:Destroy(); bodyVelocity = nil end
-        humanoid.PlatformStand = false
-    end
-    removeSpeedController()
-    if aimbotConnection then aimbotConnection:Disconnect(); aimbotConnection = nil end
-    if cameraConnection then cameraConnection:Disconnect(); cameraConnection = nil end
-    if triggerbotConnection then triggerbotConnection:Disconnect(); triggerbotConnection = nil end
-    if tpConnection then tpConnection:Disconnect(); tpConnection = nil end
-    aimTarget = nil
-    gui.mainFrame.Visible = false
-    gui.tpMenu.Visible = false
-    gui.aimSettingsMenu.Visible = false
-    gui.flySettingsMenu.Visible = false
-    updateStatus("Персонаж удалён")
-end)
+if Settings.autoRunEnabled then
+    task.wait(2)
+    if not Settings.aimbotEnabled then toggleAimbot(true) end
+    if not Settings.triggerbotEnabled then toggleTriggerbot(true) end
+    if not Settings.espEnabled then toggleESP(true) end
+    if not Settings.speedEnabled then toggleSpeed(true) end
+    if not Settings.isFlying then setFlightState(true) end
+    if not Settings.noclipEnabled then toggleNoclip(true) end
+    if not Settings.infJumpEnabled then toggleInfJump(true) end
+    updateStatus("AutoRun activated")
+end
 
--- ========== ИНИЦИАЛИЗАЦИЯ ==========
-applySpeedState()
-
-local initialRatio = (Settings.currentSpeed - Settings.minSpeed) / (Settings.maxSpeed - Settings.minSpeed)
-gui.thumb.Position = UDim2.new(initialRatio, -6, 0.5, -6)
-
-local initialFlyRatio = (Settings.currentFlySpeed - Settings.minFlySpeed) / (Settings.maxFlySpeed - Settings.minFlySpeed)
-gui.flyThumb.Position = UDim2.new(initialFlyRatio, -6, 0.5, -6)
-
-local initialEspDistRatio = (Settings.espDistance - 10) / (5000 - 10)
-gui.espDistThumb.Position = UDim2.new(initialEspDistRatio, -6, 0.5, -6)
-
-local initialAimDistRatio = (Settings.aimbotDistance - Settings.minAimbotDist) / (Settings.maxAimbotDist - Settings.minAimbotDist)
-gui.aimDistThumb.Position = UDim2.new(initialAimDistRatio, -6, 0.5, -6)
-
-local initialTriggerRatio = (Settings.currentTriggerDelay - Settings.minTriggerDelay) / (Settings.maxTriggerDelay - Settings.minTriggerDelay)
-gui.triggerDelayThumb.Position = UDim2.new(initialTriggerRatio, -6, 0.5, -6)
-
-local initialTPDistRatio = (Settings.tpDistance - 1) / (10 - 1)
-gui.tpDistThumb.Position = UDim2.new(initialTPDistRatio, -6, 0.5, -6)
-
-local v2InitialRatio = (Settings.flySpeedV2 - Settings.minFlySpeedV2) / (Settings.maxFlySpeedV2 - Settings.minFlySpeedV2)
-gui.v2Thumb.Position = UDim2.new(v2InitialRatio, -6, 0.5, -6)
-
-updateStatus("Инициализация завершена. Меню готово к работе")
-print("[SpeedMenu] Скрипт загружен и работает")
+updateStatus("Xeno Rivals loaded. Press Right Shift to open menu.")
