@@ -1,3 +1,8 @@
+-- ==================== FAZETA RIVALS | 2.0.0 ====================
+-- Drawing ESP, Custom FOV (до 179), все функции.
+-- Меню: Right Shift.
+
+-- Загрузка библиотек
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
@@ -46,6 +51,9 @@ local Settings = {
     infJumpEnabled = false,
     infJumpPower = 50,
     noclipEnabled = false,
+    -- Camera FOV
+    fovEnabled = false,
+    customFOV = 90,
     -- ESP (Drawing)
     espEnabled = false,
     espDistance = 1000,
@@ -83,8 +91,6 @@ local Settings = {
     tracerOrigin = "Head",
     -- AutoRun
     autoRunEnabled = false,
-    -- AutoLoad
-    autoLoadEnabled = false,
     -- Rage Bot
     rageBotEnabled = false,
     rageAimbot = false,
@@ -126,7 +132,7 @@ local function onPlayerRespawn(targetPlayer)
             local dist = (targetRoot.Position - myRoot.Position).Magnitude
             if dist <= 2 then
                 protectedPlayers[targetPlayer] = os.time() + 90
-                print("[Xeno] Защита " .. targetPlayer.Name .. " на 90 сек")
+                print("[Fazeta] Защита " .. targetPlayer.Name .. " на 90 сек")
             end
         end
     end)
@@ -135,10 +141,10 @@ for _, plr in ipairs(Players:GetPlayers()) do if plr ~= player then onPlayerResp
 Players.PlayerAdded:Connect(onPlayerRespawn)
 
 -- ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
-local function updateStatus(text) print("[Xeno] " .. text) end
+local function updateStatus(text) print("[Fazeta] " .. text) end
 local function isEnemy(targetPlayer)
     if targetPlayer == player then return false end
-    if _G.XenoWhitelist and _G.XenoWhitelist[targetPlayer.Name] then return false end
+    if _G.FazetaWhitelist and _G.FazetaWhitelist[targetPlayer.Name] then return false end
     if isPlayerProtected(targetPlayer) then return false end
     if not Settings.teamCheck then return true end
     local myTeam = player.Team
@@ -200,6 +206,13 @@ local function removeFlashSmoke()
     end
 end
 RunService.Heartbeat:Connect(removeFlashSmoke)
+
+-- Custom FOV (до 179)
+RunService.RenderStepped:Connect(function()
+    if Settings.fovEnabled and Camera then
+        Camera.FieldOfView = Settings.customFOV
+    end
+end)
 
 -- ==================== AIMBOT ====================
 local aimTarget = nil
@@ -549,9 +562,9 @@ local function teleportDown() local root = character and character:FindFirstChil
 -- ==================== ESP (DRAWING) ====================
 local drawingSupported = pcall(function() return Drawing.new("Square") end)
 if not drawingSupported then
-    warn("[Xeno] Drawing API не поддерживается. ESP отключен.")
+    warn("[Fazeta] Drawing API не поддерживается. ESP отключен.")
 else
-    print("[Xeno] Drawing API доступен. ESP готов.")
+    print("[Fazeta] Drawing API доступен. ESP готов.")
 end
 
 local espObjects = {}
@@ -896,23 +909,21 @@ local function applyWeaponSkin(wn, col, trans, mat, wrapTex, wrapMat, ref, useCo
 end
 
 -- ==================== GUI FLUENT ====================
-Fluent:SetTheme("Dark")
 local Window = Fluent:CreateWindow({
-    Title = "Xeno Rivals",
-    SubTitle = "Ultimate (Drawing ESP)",
+    Title = "Fazeta Rivals",
+    SubTitle = "2.0.0 (Drawing ESP)",
     TabWidth = 120,
-    Size = UDim2.fromOffset(520, 450),
+    Size = UDim2.fromOffset(520, 480),
     Acrylic = false,
-    Theme = "Dark",
     MinimizeKey = Enum.KeyCode.RightShift
 })
 local Tabs = {
     Aimbot = Window:AddTab({ Title = "Aimbot", Icon = "crosshair" }),
     Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
     Player = Window:AddTab({ Title = "Player", Icon = "user" }),
-    Teleport = Window:AddTab({ Title = "Teleport", Icon = "location-dot" }),
+    Teleport = Window:AddTab({ Title = "Teleport", Icon = "map" }),
     Misc = Window:AddTab({ Title = "Misc", Icon = "sliders" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "gear" })
+    Settings = Window:AddTab({ Title = "Settings", Icon = "cog" })
 }
 
 -- Aimbot Tab
@@ -932,7 +943,7 @@ aimSec:AddSlider("headChanceSlider", {Title="Head Chance (%)", Min=0, Max=100, D
 aimSec:AddToggle("stayOnTargetToggle", {Title="Stay on target after kill", Default=Settings.aimbotStayOnTarget, Callback=function(v) Settings.aimbotStayOnTarget=v end})
 aimSec:AddButton({Title="Add to Whitelist", Callback=function()
     local target = getTargetFromCam()
-    if target then _G.XenoWhitelist = _G.XenoWhitelist or {}; _G.XenoWhitelist[target.Name]=true; updateStatus("Whitelist + "..target.Name) else updateStatus("No target") end
+    if target then _G.FazetaWhitelist = _G.FazetaWhitelist or {}; _G.FazetaWhitelist[target.Name]=true; updateStatus("Whitelist + "..target.Name) else updateStatus("No target") end
 end})
 
 local trigSec = Tabs.Aimbot:AddSection("Triggerbot")
@@ -954,7 +965,7 @@ specSec:AddSlider("shotgunTPSlider", {Title="Shotgun TP Dist", Min=1, Max=10, De
 specSec:AddToggle("daggerToggle", {Title="Dagger Mode", Default=Settings.daggerModeEnabled, Callback=function(v) Settings.daggerModeEnabled=v end})
 specSec:AddSlider("daggerDistSlider", {Title="Parry Distance", Min=5, Max=30, Default=Settings.daggerParryDistance, Rounding=1, Callback=function(v) Settings.daggerParryDistance=v end})
 
--- Visuals Tab (Drawing ESP)
+-- Visuals Tab
 local espSec = Tabs.Visuals:AddSection("ESP (Drawing)")
 espSec:AddToggle("espToggle", {Title="Enable ESP", Default=Settings.espEnabled, Callback=toggleESP})
 espSec:AddSlider("espDistSlider", {Title="Max Distance", Min=100, Max=5000, Default=Settings.espDistance, Rounding=0, Callback=function(v) Settings.espDistance=v end})
@@ -996,6 +1007,10 @@ moveSec:AddDropdown("flyModeDropdown", {Title="Fly Mode", Values={"V1","V2","V3"
 moveSec:AddSlider("flySpeedSlider", {Title="Fly Speed V2/V3", Min=1, Max=1000, Default=Settings.flySpeedV2, Rounding=1, Callback=function(v) Settings.flySpeedV2=v end})
 moveSec:AddToggle("noclipToggle", {Title="Noclip", Default=Settings.noclipEnabled, Callback=toggleNoclip})
 moveSec:AddToggle("infJumpToggle", {Title="Infinite Jump", Default=Settings.infJumpEnabled, Callback=toggleInfJump})
+
+local cameraSec = Tabs.Player:AddSection("Camera")
+cameraSec:AddToggle("fovToggle", {Title="Custom FOV", Default=Settings.fovEnabled, Callback=function(v) Settings.fovEnabled = v; if not v and Camera then Camera.FieldOfView = 70 end end})
+cameraSec:AddSlider("fovSlider", {Title="FOV Value", Min=30, Max=179, Default=Settings.customFOV, Rounding=0, Callback=function(v) Settings.customFOV = v; if Settings.fovEnabled and Camera then Camera.FieldOfView = v end end})
 
 -- Teleport Tab
 local tpSec = Tabs.Teleport:AddSection("Auto Teleport")
@@ -1079,27 +1094,28 @@ skinSec:AddButton({Title="Remove Effects", Callback=function()
     end
 end})
 
--- Settings Tab
+-- Settings Tab (без AutoLoad)
 local setSec = Tabs.Settings:AddSection("General")
-setSec:AddToggle("autoLoadToggle", {Title="AutoLoad", Description="Restore functions after respawn", Default=Settings.autoLoadEnabled, Callback=function(state)
-    Settings.autoLoadEnabled = state
-    if state then
-        updateStatus("AutoLoad включён")
-    else
-        updateStatus("AutoLoad выключен")
+setSec:AddButton({Title="Reset All Settings", Callback=function()
+    for k,v in pairs(Settings) do
+        if type(v) == "boolean" then Settings[k] = false
+        elseif type(v) == "number" then Settings[k] = 0
+        elseif type(v) == "string" then Settings[k] = ""
+        end
     end
+    updateStatus("Настройки сброшены")
 end})
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
-SaveManager:SetFolder("XenoRivalsUltimate")
-InterfaceManager:SetFolder("XenoRivalsUltimate")
+SaveManager:SetFolder("FazetaRivals")
+InterfaceManager:SetFolder("FazetaRivals")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
 Window:SelectTab(1)
 
--- ==================== АВТОВОССТАНОВЛЕНИЕ ====================
+-- ==================== АВТОВОССТАНОВЛЕНИЕ ПОСЛЕ РЕСПАВНА ====================
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
     humanoid = newChar:WaitForChild("Humanoid")
@@ -1111,7 +1127,6 @@ player.CharacterAdded:Connect(function(newChar)
     if Settings.triggerbotEnabled then startTriggerbot() end
     if Settings.tpEnabled then startTP() end
     if randomTPActive then toggleRandomTP(true) end
-    -- ESP автоматически подхватит нового персонажа через цикл RenderStepped
 end)
 
 UserInputService.InputBegan:Connect(function(inp,gp)
@@ -1141,4 +1156,4 @@ if Settings.autoRunEnabled then
     updateStatus("AutoRun activated")
 end
 
-updateStatus("Xeno Rivals loaded. Press Right Shift to open menu.")
+updateStatus("Fazeta Rivals 2.0.0 loaded. Press Right Shift to open menu.")
