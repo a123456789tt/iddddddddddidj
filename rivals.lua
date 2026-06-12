@@ -1,21 +1,22 @@
--- ==================== FAZETA RIVALS | 2.0.0 ====================
--- Drawing ESP, Custom FOV (до 179), все функции.
--- Меню: Right Shift.
+-- ==================== FAZZETA RIVALS v2.2 (Атмосферный вайб) ====================
 
--- Загрузка библиотек
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+	
 
--- Сервисы
+
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local Camera = workspace.CurrentCamera
+local Camera = Workspace.CurrentCamera
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local MaterialService = game:GetService("MaterialService")
 local Lighting = game:GetService("Lighting")
+local MarketplaceService = game:GetService("MarketplaceService")
+local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -23,14 +24,11 @@ local humanoid = character:WaitForChild("Humanoid")
 
 -- ==================== НАСТРОЙКИ ====================
 local Settings = {
-    -- Speed
     speedEnabled = true,
     currentSpeed = 16,
-    -- Fly
     flyMode = "V3",
     flySpeedV2 = 60,
     isFlying = false,
-    -- Aimbot
     aimbotEnabled = false,
     aimbotDistance = 300,
     aimbotSmoothness = 0.7,
@@ -44,17 +42,13 @@ local Settings = {
     aimbotRandomPart = false,
     aimbotHeadChance = 70,
     aimbotStayOnTarget = true,
-    -- Triggerbot
     triggerbotEnabled = false,
     currentTriggerDelay = 150,
-    -- Misc
     infJumpEnabled = false,
     infJumpPower = 50,
     noclipEnabled = false,
-    -- Camera FOV
     fovEnabled = false,
     customFOV = 90,
-    -- ESP (Drawing)
     espEnabled = false,
     espDistance = 1000,
     espBoxEnabled = true,
@@ -68,51 +62,99 @@ local Settings = {
     espLevelColor = Color3.fromRGB(255, 255, 255),
     espSkeletonEnabled = false,
     espSkeletonColor = Color3.fromRGB(255, 150, 200),
-    -- Device
-    devices = {"PC", "Phone", "Joystick", "VR"},
-    deviceIndex = 1,
-    -- Teleport
     tpEnabled = false,
     tpPosition = "Front",
     tpDistance = 2,
-    -- Shotgun
     shotgunModeEnabled = false,
     shotgunTPDistance = 5,
     shotgunUpdateRate = 0.1,
-    -- Dagger
     daggerModeEnabled = false,
     daggerParryKey = Enum.KeyCode.Q,
     daggerParryDistance = 15,
-    -- Tracers
     tracerEnabled = false,
     tracerLength = 500,
     tracerDuration = 0.5,
     tracerColor = Color3.new(1, 0.5, 0),
-    tracerOrigin = "Head",
-    -- AutoRun
     autoRunEnabled = false,
-    -- Rage Bot
-    rageBotEnabled = false,
-    rageAimbot = false,
-    rageTriggerbot = false,
-    rageWallPen = false,
-    rageShootDelay = 150,
-    rageHitPart = "Head",
-    rageSwitchOnEmpty = false,
-    -- No Recoil/Spread & Visuals
     noRecoil = false,
     noSpread = false,
     noFlash = false,
     noSmoke = false,
+    rpgBlockEnabled = false,
+    rpgBlockSize = 12,
+    fogEnabled = false,
+    fogDensity = 0.1,
+    fogColor = Color3.fromRGB(200, 200, 200),
+    hudEnabled = true,
+    hudShowNick = true,
+    hudShowGame = true,
+    hudShowPing = true,
+    hudShowFPS = true,
+    hudShowTitle = true,
+    hudShowVersion = true,
+    hudDevice = "PC",
+    slideBoostEnabled = false,
+    slideBoostPower = 5,
+    constantTpUp = false,
+    randomTpRadius = 50,
+    skyEnabled = false,
+    skyColor = Color3.fromRGB(135, 206, 235),
+    silentAimEnabled = false,
+    silentAutoFire = true,
+    silentFOVEnabled = false,
+    silentFOVRadius = 100,
+    silentFOVColor = Color3.fromRGB(255,255,255),
+    showSilentFOV = true,
+    winterEnabled = false
 }
 
--- ==================== ЗАЩИТА ПОСЛЕ РЕСПАВНА (2 студии, 90 сек) ====================
+-- ==================== FIRE CONTROL ====================
+local fireEmitters = {}
+local function isFireParticle(particle)
+    local n = particle.Name:lower()
+    return n:find("fire") or n:find("flame") or n:find("ignite") or n:find("burn")
+end
+local function addFireEmitter(emitter)
+    if isFireParticle(emitter) then fireEmitters[emitter] = true end
+end
+local function removeFireEmitter(emitter)
+    fireEmitters[emitter] = nil
+end
+for _, v in ipairs(Workspace:GetDescendants()) do
+    if v:IsA("ParticleEmitter") then addFireEmitter(v)
+    elseif v:IsA("Fire") then addFireEmitter(v) end
+end
+Workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("ParticleEmitter") or obj:IsA("Fire") then addFireEmitter(obj) end
+end)
+Workspace.DescendantRemoving:Connect(function(obj)
+    if fireEmitters[obj] then removeFireEmitter(obj) end
+end)
+local function randomizeFireColors()
+    for emitter, _ in pairs(fireEmitters) do
+        local c1 = Color3.fromRGB(math.random(255), math.random(255), math.random(255))
+        local c2 = Color3.fromRGB(math.random(255), math.random(255), math.random(255))
+        local c3 = Color3.fromRGB(math.random(255), math.random(255), math.random(255))
+        local gradient = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, c1),
+            ColorSequenceKeypoint.new(0.5, c2),
+            ColorSequenceKeypoint.new(1, c3)
+        })
+        if emitter:IsA("ParticleEmitter") then
+            emitter.Color = gradient
+        elseif emitter:IsA("Fire") then
+            emitter.Color = c2
+            emitter.SecondaryColor = c3
+        end
+    end
+end
+
+-- ==================== ЗАЩИТА ПОСЛЕ РЕСПАВНА ====================
 local protectedPlayers = {}
 local function isPlayerProtected(targetPlayer)
     local untilTime = protectedPlayers[targetPlayer]
     return untilTime and os.time() < untilTime
 end
-
 task.spawn(function()
     while true do
         task.wait(30)
@@ -122,7 +164,6 @@ task.spawn(function()
         end
     end
 end)
-
 local function onPlayerRespawn(targetPlayer)
     targetPlayer.CharacterAdded:Connect(function(newChar)
         task.wait(0.5)
@@ -132,7 +173,6 @@ local function onPlayerRespawn(targetPlayer)
             local dist = (targetRoot.Position - myRoot.Position).Magnitude
             if dist <= 2 then
                 protectedPlayers[targetPlayer] = os.time() + 90
-                print("[Fazeta] Защита " .. targetPlayer.Name .. " на 90 сек")
             end
         end
     end)
@@ -141,28 +181,28 @@ for _, plr in ipairs(Players:GetPlayers()) do if plr ~= player then onPlayerResp
 Players.PlayerAdded:Connect(onPlayerRespawn)
 
 -- ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
-local function updateStatus(text) print("[Fazeta] " .. text) end
+local function updateStatus(text) print("[FazZzeta] " .. text) end
 local function isEnemy(targetPlayer)
     if targetPlayer == player then return false end
     if _G.FazetaWhitelist and _G.FazetaWhitelist[targetPlayer.Name] then return false end
     if isPlayerProtected(targetPlayer) then return false end
     if not Settings.teamCheck then return true end
-    local myTeam = player.Team
-    local targetTeam = targetPlayer.Team
-    if myTeam and targetTeam then return myTeam ~= targetTeam else return true end
+    if not targetPlayer.Team then return false end
+    if not player.Team then return true end
+    return player.Team ~= targetPlayer.Team
 end
-
 local function canSee(targetPart)
-    local ignore = Settings.aimbotIgnoreWalls or (Settings.rageBotEnabled and Settings.rageWallPen)
-    if ignore then return true end
+    if Settings.aimbotIgnoreWalls then return true end
     local origin = Camera.CFrame.Position
+    local direction = (targetPart.Position - origin).Unit * 1000
     local params = RaycastParams.new()
     params.FilterDescendantsInstances = {character, Camera}
     params.FilterType = Enum.RaycastFilterType.Blacklist
-    local result = Workspace:Raycast(origin, (targetPart.Position - origin).Unit * 1000, params)
+    local result = Workspace:Raycast(origin, direction, params)
     if result and result.Instance then
-        local hitChar = result.Instance:FindFirstAncestorOfClass("Model")
-        if hitChar and hitChar:FindFirstChild("Humanoid") then return true end
+        local hit = result.Instance
+        local hitChar = hit:FindFirstAncestorOfClass("Model")
+        if hitChar and hitChar == targetPart.Parent then return true end
         return false
     end
     return true
@@ -189,54 +229,68 @@ end
 RunService.Heartbeat:Connect(applyNoRecoilSpread)
 
 -- No Flash / No Smoke
-local function removeFlashSmoke()
-    if Settings.noFlash then
-        for _, v in ipairs(Workspace:GetDescendants()) do
-            if v.Name:lower():find("flash") or v.Name:lower():find("flashbang") then
-                v:Destroy()
-            end
-        end
-    end
+local function removeFlashSmoke(obj)
+    if not obj:IsA("BasePart") and not obj:IsA("ParticleEmitter") and not obj:IsA("Smoke") then return end
+    local parentName = obj.Parent and obj.Parent.Name:lower() or ""
+    local objName = obj.Name:lower()
+    if Settings.noFlash and (objName:find("flash") or parentName:find("flash")) then obj:Destroy() return end
     if Settings.noSmoke then
-        for _, v in ipairs(Workspace:GetDescendants()) do
-            if v.Name:lower():find("smoke") then
-                v:Destroy()
-            end
+        if obj:IsA("Smoke") then obj:Destroy()
+        elseif obj:IsA("BasePart") and (objName:find("smoke") or objName:find("grenade") or parentName:find("smoke") or parentName:find("grenade")) then obj:Destroy()
+        elseif obj:IsA("ParticleEmitter") and (objName:find("smoke") or parentName:find("smoke") or objName:find("grenade")) then obj:Destroy()
         end
     end
 end
-RunService.Heartbeat:Connect(removeFlashSmoke)
+Workspace.DescendantAdded:Connect(removeFlashSmoke)
+for _, v in ipairs(Workspace:GetDescendants()) do removeFlashSmoke(v) end
 
--- Custom FOV (до 179)
+-- Custom FOV
 RunService.RenderStepped:Connect(function()
-    if Settings.fovEnabled and Camera then
-        Camera.FieldOfView = Settings.customFOV
-    end
+    if Settings.fovEnabled and Camera then Camera.FieldOfView = math.clamp(Settings.customFOV, 30, 120) end
 end)
+
+-- Fog & Sky (базовые)
+local function applyFog()
+    if Settings.winterEnabled then return end
+    if Settings.fogEnabled then
+        local density = math.clamp(Settings.fogDensity, 0, 1)
+        local fogEnd = math.clamp(500 * (1 - density), 10, 500)
+        Lighting.FogStart = 0
+        Lighting.FogEnd = fogEnd
+        Lighting.FogColor = Settings.fogColor
+        local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere") or Instance.new("Atmosphere")
+        atmosphere.Parent = Lighting
+        atmosphere.Density = density * 0.8
+        atmosphere.Color = Settings.fogColor
+        atmosphere.Haze = density * 2
+        atmosphere.Glare = 0
+    else
+        Lighting.FogStart = 0
+        Lighting.FogEnd = 100000
+        local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+        if atmosphere then atmosphere:Destroy() end
+    end
+end
+RunService.RenderStepped:Connect(applyFog)
+
+local function applySky()
+    if Settings.winterEnabled then return end
+    if Settings.skyEnabled then
+        Lighting.Ambient = Settings.skyColor
+        Lighting.OutdoorAmbient = Settings.skyColor
+    else
+        Lighting.Ambient = Color3.fromRGB(70, 70, 70)
+        Lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
+    end
+end
 
 -- ==================== AIMBOT ====================
 local aimTarget = nil
 local aimbotConnection, cameraConnection
 local function getTargetPart(char)
-    if Settings.rageBotEnabled then
-        local part = Settings.rageHitPart == "Head" and char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-        if part then return part end
-    end
-    if Settings.aimbotRandomPart then
-        local rand = math.random(1, 100)
-        if rand <= Settings.aimbotHeadChance then
-            return char:FindFirstChild("Head")
-        else
-            return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-        end
-    end
-    if Settings.aimbotTargetPart == "Head" then
-        return char:FindFirstChild("Head")
-    else
-        return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-    end
+    if Settings.aimbotTargetPart == "Head" then return char:FindFirstChild("Head")
+    else return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") end
 end
-
 local function findBestTarget()
     if not character or not character:FindFirstChild("HumanoidRootPart") then return nil, nil end
     local myPos = character.HumanoidRootPart.Position
@@ -276,19 +330,14 @@ local function findBestTarget()
         return best.player, best.part
     end
 end
-
 local function aimAt(part)
     if not Camera or not part then return end
-    local targetPos = part.Position
-    local newCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
-    local smooth = Settings.aimbotSmoothness * (0.9 + 0.2*math.random())
-    Camera.CFrame = Camera.CFrame:Lerp(newCFrame, smooth)
+    local newCFrame = CFrame.lookAt(Camera.CFrame.Position, part.Position)
+    Camera.CFrame = Camera.CFrame:Lerp(newCFrame, Settings.aimbotSmoothness)
 end
-
 local rmbHeld = false
 UserInputService.InputBegan:Connect(function(inp,gp) if not gp and inp.UserInputType == Enum.UserInputType.MouseButton2 then rmbHeld = true end end)
 UserInputService.InputEnded:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton2 then rmbHeld = false end end)
-
 function startAimbot()
     if aimbotConnection then aimbotConnection:Disconnect() end
     if cameraConnection then cameraConnection:Disconnect() end
@@ -297,26 +346,20 @@ function startAimbot()
         if Settings.aimbotOnRMB then active = active and rmbHeld end
         if active then
             local _, part = findBestTarget()
-            if part then
-                aimAt(part)
-                aimTarget = part
-            elseif not Settings.aimbotStayOnTarget then
-                aimTarget = nil
-            end
+            if part then aimAt(part); aimTarget = part else aimTarget = nil end
         end
     end)
     cameraConnection = Camera:GetPropertyChangedSignal("CFrame"):Connect(function()
-        local active = Settings.aimbotEnabled
-        if Settings.aimbotOnRMB then active = active and rmbHeld end
-        if active and aimTarget and aimTarget.Parent then aimAt(aimTarget) end
+        if Settings.aimbotEnabled and (not Settings.aimbotOnRMB or rmbHeld) and aimTarget and aimTarget.Parent then aimAt(aimTarget) end
     end)
 end
-local function toggleAimbot(s) Settings.aimbotEnabled = s; if s then startAimbot() else if aimbotConnection then aimbotConnection:Disconnect(); aimbotConnection=nil end; if cameraConnection then cameraConnection:Disconnect(); cameraConnection=nil end; aimTarget=nil end end
+local function toggleAimbot(s) Settings.aimbotEnabled = s; if s then startAimbot() else aimbotConnection:Disconnect(); cameraConnection:Disconnect(); aimTarget=nil end end
 
 -- ==================== TRIGGERBOT ====================
 local triggerbotConnection, lastShot = nil, 0
 local function getTargetFromCam()
-    local ray = Camera:ScreenPointToRay(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y)
+    local mousePos = UserInputService:GetMouseLocation()
+    local ray = Camera:ScreenPointToRay(mousePos.X, mousePos.Y)
     local params = RaycastParams.new()
     params.FilterDescendantsInstances = {character, Camera}
     params.FilterType = Enum.RaycastFilterType.Blacklist
@@ -333,32 +376,123 @@ end
 function startTriggerbot()
     if triggerbotConnection then triggerbotConnection:Disconnect() end
     triggerbotConnection = RunService.Heartbeat:Connect(function()
-        local active = Settings.triggerbotEnabled or (Settings.rageBotEnabled and Settings.rageTriggerbot)
-        if active then
-            local target = getTargetFromCam()
-            if target then
-                local delay = Settings.rageBotEnabled and Settings.rageShootDelay or Settings.currentTriggerDelay
-                local now = tick()*1000
-                if now - lastShot >= delay then
-                    VirtualInputManager:SendMouseButtonEvent(0,0,0,true,game,1)
-                    task.wait()
-                    VirtualInputManager:SendMouseButtonEvent(0,0,0,false,game,1)
-                    lastShot = now
-                end
-            end
+        if not Settings.triggerbotEnabled then return end
+        local now = tick()*1000
+        if now - lastShot < Settings.currentTriggerDelay then return end
+        local target = getTargetFromCam()
+        if target then
+            VirtualInputManager:SendMouseButtonEvent(0,0,0,true,game,1)
+            task.wait()
+            VirtualInputManager:SendMouseButtonEvent(0,0,0,false,game,1)
+            lastShot = tick()*1000
         end
     end)
 end
-local function toggleTriggerbot(s) Settings.triggerbotEnabled = s; if s then startTriggerbot() else if triggerbotConnection then triggerbotConnection:Disconnect(); triggerbotConnection=nil end end end
+local function toggleTriggerbot(s) Settings.triggerbotEnabled = s; if s then startTriggerbot() else triggerbotConnection:Disconnect() end end
 
--- ==================== RAGE BOT ====================
-local function applyRage()
-    if Settings.rageBotEnabled then
-        if not Settings.aimbotEnabled and Settings.rageAimbot then toggleAimbot(true) end
-        if not Settings.triggerbotEnabled and Settings.rageTriggerbot then toggleTriggerbot(true) end
-    end
+-- ==================== SILENT AIM ====================
+local function getTargetPartForSilent(char)
+    if Settings.aimbotTargetPart == "Head" then return char:FindFirstChild("Head")
+    else return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") end
 end
-local function toggleRageBot(s) Settings.rageBotEnabled = s; if s then applyRage() else updateStatus("Rage Bot выключен") end end
+local function findBestTargetForSilent()
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
+    local myPos = character.HumanoidRootPart.Position
+    local best, bestDist = nil, nil
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= player and other.Character and isEnemy(other) then
+            local targetChar = other.Character
+            local hum = targetChar:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then
+                local part = getTargetPartForSilent(targetChar)
+                if part and canSee(part) then
+                    local dist = (part.Position - myPos).Magnitude
+                    if dist <= Settings.aimbotDistance and (not bestDist or dist < bestDist) then
+                        best = part
+                        bestDist = dist
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+local function isTargetInFOV(part)
+    if not Settings.silentFOVEnabled then return true end
+    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+    if not onScreen then return false end
+    local center = Camera.ViewportSize / 2
+    return (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude <= Settings.silentFOVRadius
+end
+local function findBestTargetSilentFOV()
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
+    local myPos = character.HumanoidRootPart.Position
+    local candidates = {}
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= player and other.Character and isEnemy(other) then
+            local targetChar = other.Character
+            local hum = targetChar:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then
+                local part = getTargetPartForSilent(targetChar)
+                if part and canSee(part) then
+                    local dist = (part.Position - myPos).Magnitude
+                    if dist <= Settings.aimbotDistance and isTargetInFOV(part) then
+                        table.insert(candidates, {part=part, dist=dist})
+                    end
+                end
+            end
+        end
+    end
+    if #candidates == 0 then return nil end
+    table.sort(candidates, function(a,b) return a.dist < b.dist end)
+    return candidates[1].part
+end
+local function doSilentShot()
+    local targetPart = Settings.silentFOVEnabled and findBestTargetSilentFOV() or findBestTargetForSilent()
+    if not targetPart then return end
+    local originalCFrame = Camera.CFrame
+    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
+    VirtualInputManager:SendMouseButtonEvent(0,0,0,true,game,1)
+    task.wait()
+    VirtualInputManager:SendMouseButtonEvent(0,0,0,false,game,1)
+    Camera.CFrame = originalCFrame
+end
+local silentFireLoop = nil
+local function autoFireLoop()
+    while Settings.silentAimEnabled and Settings.silentAutoFire and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+        doSilentShot()
+        task.wait(Settings.currentTriggerDelay / 1000)
+    end
+    silentFireLoop = nil
+end
+UserInputService.InputBegan:Connect(function(inp, gp)
+    if gp then return end
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 and Settings.silentAimEnabled then
+        if Settings.silentAutoFire then
+            if not silentFireLoop then silentFireLoop = task.spawn(autoFireLoop) end
+        else
+            doSilentShot()
+        end
+    end
+end)
+
+-- FOV Circle
+local fovCircle = nil
+RunService.RenderStepped:Connect(function()
+    if Settings.showSilentFOV and Settings.silentFOVEnabled then
+        if not fovCircle then
+            fovCircle = Drawing.new("Circle")
+            fovCircle.Thickness = 2
+            fovCircle.Filled = false
+        end
+        fovCircle.Visible = true
+        fovCircle.Position = Camera.ViewportSize / 2
+        fovCircle.Radius = Settings.silentFOVRadius
+        fovCircle.Color = Settings.silentFOVColor
+    else
+        if fovCircle then fovCircle.Visible = false end
+    end
+end)
 
 -- ==================== SPEED, FLY, NOCLIP, INFJUMP ====================
 local speedController = nil
@@ -369,7 +503,6 @@ local function setupSpeed()
     if not root then return end
     if not speedController then
         speedController = Instance.new("BodyVelocity")
-        speedController.Name = "SpeedController"
         speedController.MaxForce = Vector3.new(1e5, 0, 1e5)
         speedController.P = 1e4
         speedController.Parent = root
@@ -381,15 +514,13 @@ RunService.Heartbeat:Connect(function()
     if speedController and character and humanoid and not Settings.isFlying then
         local move = humanoid.MoveDirection
         if move.Magnitude > 0.01 then
-            speedController.Velocity = move * (Settings.currentSpeed * (0.95+0.1*math.random()))
+            speedController.Velocity = move * Settings.currentSpeed
         else
             speedController.Velocity = Vector3.new(0, speedController.Velocity.Y, 0)
         end
-    elseif speedController and Settings.isFlying then
-        speedController.Velocity = Vector3.new(0,0,0)
     end
 end)
-local function toggleSpeed(s) Settings.speedEnabled = s; if s then applySpeedState() else removeSpeed() end end
+local function toggleSpeed(s) Settings.speedEnabled = s; applySpeedState() end
 
 local function setFlightState(state)
     if state == Settings.isFlying then return end
@@ -452,6 +583,25 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- Slide Boost
+local function startSlideBoost()
+    if not Settings.slideBoostEnabled then return end
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local hum = character and character:FindFirstChild("Humanoid")
+    if not root or not hum then return end
+    if hum.MoveDirection.Magnitude < 0.1 then return end
+    local speed = Settings.slideBoostPower * 10
+    local boostVel = Instance.new("BodyVelocity")
+    boostVel.MaxForce = Vector3.new(1e5,0,1e5)
+    boostVel.Velocity = hum.MoveDirection.Unit * speed
+    boostVel.Parent = root
+    task.delay(0.5, function() boostVel:Destroy() end)
+end
+UserInputService.InputBegan:Connect(function(inp, gp)
+    if gp then return end
+    if inp.KeyCode == Enum.KeyCode.LeftControl and Settings.slideBoostEnabled then startSlideBoost() end
+end)
+
 local function applyNoclip(state)
     if not character then return end
     for _,v in ipairs(character:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = not state end end
@@ -473,16 +623,14 @@ end)
 local lastShotgunUpdate = 0
 local function shotgunLoop()
     if not Settings.shotgunModeEnabled then return end
-    if not character or not character.Parent or humanoid.Health <= 0 then return end
+    if not character or humanoid.Health <= 0 then return end
     local now = tick()
     if now - lastShotgunUpdate < Settings.shotgunUpdateRate then return end
     lastShotgunUpdate = now
     local _, part = findBestTarget()
     if part then
         local myRoot = character:FindFirstChild("HumanoidRootPart")
-        if myRoot then
-            myRoot.CFrame = CFrame.new(part.Position - Vector3.new(0, Settings.shotgunTPDistance, 0))
-        end
+        if myRoot then myRoot.CFrame = CFrame.new(part.Position - Vector3.new(0, Settings.shotgunTPDistance, 0)) end
     end
 end
 RunService.Heartbeat:Connect(shotgunLoop)
@@ -515,8 +663,12 @@ RunService.Heartbeat:Connect(daggerLoop)
 
 -- ==================== TELEPORT ====================
 local tpConnection = nil
+local lastTeleportTime = 0
+local TELEPORT_COOLDOWN = 0.2
+
 local function getNearestEnemy()
-    local myRoot = character and character:FindFirstChild("HumanoidRootPart")
+    if not character then return nil end
+    local myRoot = character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return nil end
     local nearest, nearestDist = nil, math.huge
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -534,56 +686,98 @@ local function getNearestEnemy()
     end
     return nearest
 end
+
 local function teleportToEnemy()
     local target = getNearestEnemy()
     if not target then return end
     local myRoot = character and character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
+
     local offset
     if Settings.tpPosition == "Front" then offset = target.CFrame.LookVector * Settings.tpDistance
     elseif Settings.tpPosition == "Back" then offset = -target.CFrame.LookVector * Settings.tpDistance
     elseif Settings.tpPosition == "Up" then offset = Vector3.new(0, Settings.tpDistance, 0)
     elseif Settings.tpPosition == "Down" then offset = Vector3.new(0, -Settings.tpDistance, 0)
-    else offset = Vector3.new(0,0,0) end
+    else offset = Vector3.zero end
+
+    local now = tick()
+    if now - lastTeleportTime < TELEPORT_COOLDOWN then return end
+    lastTeleportTime = now
+
     myRoot.CFrame = CFrame.new(target.Position + offset)
 end
-local function startTP() if tpConnection then tpConnection:Disconnect() end; tpConnection = RunService.Heartbeat:Connect(teleportToEnemy) end
-local function stopTP() if tpConnection then tpConnection:Disconnect(); tpConnection=nil end end
-local function toggleTP(s) Settings.tpEnabled = s; if s then startTP() else stopTP() end end
+
+local function startTP()
+    if tpConnection then tpConnection:Disconnect() end
+    tpConnection = RunService.Heartbeat:Connect(teleportToEnemy)
+end
+
+local function stopTP()
+    if tpConnection then tpConnection:Disconnect(); tpConnection = nil end
+end
+
+local function toggleTP(s)
+    Settings.tpEnabled = s
+    if s then startTP() else stopTP() end
+end
+
+-- ==================== RANDOM TP / TP UP ====================
 local randomTPConnection = nil
 local randomTPActive = false
-local function teleportRandom()
+local function teleportRandomAroundSelf()
     local root = character and character:FindFirstChild("HumanoidRootPart")
-    if root then root.CFrame = root.CFrame + Vector3.new((math.random()-0.5)*2000, (math.random()-0.5)*2000, (math.random()-0.5)*2000) end
+    if root then
+        local angle = math.random() * 2 * math.pi
+        local radius = Settings.randomTpRadius * math.random()
+        local offset = Vector3.new(math.cos(angle)*radius, 0, math.sin(angle)*radius)
+        root.CFrame = root.CFrame + offset
+    end
 end
-local function toggleRandomTP(s) randomTPActive = s; if s then if randomTPConnection then randomTPConnection:Disconnect() end; randomTPConnection = RunService.Heartbeat:Connect(function() if randomTPActive then teleportRandom(); task.wait(0.1) end end) else if randomTPConnection then randomTPConnection:Disconnect(); randomTPConnection=nil end end end
-local function teleportDown() local root = character and character:FindFirstChild("HumanoidRootPart"); if root then root.CFrame = root.CFrame + Vector3.new(0,-1000,0) end end
+local function toggleRandomTP(s)
+    randomTPActive = s
+    if s then
+        if randomTPConnection then randomTPConnection:Disconnect() end
+        randomTPConnection = RunService.Heartbeat:Connect(function()
+            if randomTPActive then teleportRandomAroundSelf(); task.wait(0.1) end
+        end)
+    else
+        if randomTPConnection then randomTPConnection:Disconnect(); randomTPConnection=nil end
+    end
+end
 
--- ==================== ESP (DRAWING) ====================
-local drawingSupported = pcall(function() return Drawing.new("Square") end)
-if not drawingSupported then
-    warn("[Fazeta] Drawing API не поддерживается. ESP отключен.")
-else
-    print("[Fazeta] Drawing API доступен. ESP готов.")
+local function teleportUp()
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if root then root.CFrame = root.CFrame + Vector3.new(0, 1000, 0) end
 end
+local constantUpConnection = nil
+local function toggleConstantUp(s)
+    Settings.constantTpUp = s
+    if s then
+        if constantUpConnection then constantUpConnection:Disconnect() end
+        constantUpConnection = RunService.Heartbeat:Connect(function()
+            teleportUp()
+            task.wait(0.05)
+        end)
+    else
+        if constantUpConnection then constantUpConnection:Disconnect(); constantUpConnection=nil end
+    end
+end
+
+-- ==================== ESP ====================
+local drawingSupported = pcall(function() return Drawing.new("Square") end)
+if not drawingSupported then warn("[FazZzeta] Drawing API не поддерживается. ESP отключен.") else print("[FazZzeta] Drawing API доступен.") end
 
 local espObjects = {}
-
 local function getPlayerLevel(plr)
     local leaderstats = plr:FindFirstChild("leaderstats")
     if leaderstats then
         local level = leaderstats:FindFirstChild("Level") or leaderstats:FindFirstChild("Rank")
-        if level and type(level.Value) == "number" then
-            return level.Value
-        end
+        if level and type(level.Value) == "number" then return level.Value end
     end
     local attr = plr:GetAttribute("Level") or plr:GetAttribute("Rank")
-    if attr and type(attr) == "number" then
-        return attr
-    end
+    if attr and type(attr) == "number" then return attr end
     return nil
 end
-
 local function getLevelColor(level)
     if not level then return Color3.fromRGB(128,128,128) end
     if level <= 50 then return Color3.fromRGB(0,255,0)
@@ -592,11 +786,9 @@ local function getLevelColor(level)
     elseif level <= 350 then return Color3.fromRGB(255,0,0)
     else return Color3.fromRGB(139,69,19) end
 end
-
 local function createESP(plr)
     if espObjects[plr] then return end
     if not drawingSupported then return end
-
     local esp = {}
     if Settings.espBoxEnabled then
         esp.box = Drawing.new("Square")
@@ -645,7 +837,6 @@ local function createESP(plr)
     end
     espObjects[plr] = esp
 end
-
 local function removeESP(plr)
     local esp = espObjects[plr]
     if not esp then return end
@@ -653,57 +844,28 @@ local function removeESP(plr)
     if esp.name then esp.name:Remove() end
     if esp.health then esp.health:Remove() end
     if esp.level then esp.level:Remove() end
-    if esp.skeleton then
-        for _, bone in ipairs(esp.skeleton) do bone.line:Remove() end
-    end
+    if esp.skeleton then for _, bone in ipairs(esp.skeleton) do bone.line:Remove() end end
     espObjects[plr] = nil
 end
-
 local function updateDrawingESP()
-    if not Settings.espEnabled then
-        for plr in pairs(espObjects) do removeESP(plr) end
-        return
-    end
-
+    if not Settings.espEnabled then for plr in pairs(espObjects) do removeESP(plr) end return end
     local myChar = player.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr == player then
-            removeESP(plr)
-            continue
-        end
-        if not isEnemy(plr) then
-            removeESP(plr)
-            continue
-        end
-
+        if plr == player or not isEnemy(plr) then removeESP(plr); continue end
         local char = plr.Character
         if not char then removeESP(plr); continue end
-
         local root = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChild("Humanoid")
-        if not root or not hum or hum.Health <= 0 then
-            removeESP(plr)
-            continue
-        end
-
-        if myRoot then
-            if (root.Position - myRoot.Position).Magnitude > Settings.espDistance then
-                removeESP(plr)
-                continue
-            end
-        end
-
+        if not root or not hum or hum.Health <= 0 then removeESP(plr); continue end
+        if myRoot and (root.Position - myRoot.Position).Magnitude > Settings.espDistance then removeESP(plr); continue end
         createESP(plr)
         local esp = espObjects[plr]
         if not esp then continue end
-
         local rootPos, rootOnScreen = Camera:WorldToViewportPoint(root.Position)
         local head = char:FindFirstChild("Head")
-        local headPos = head and head.Position or root.Position + Vector3.new(0, 2, 0)
+        local headPos = head and head.Position or root.Position + Vector3.new(0,2,0)
         local headScreen, headOnScreen = Camera:WorldToViewportPoint(headPos)
-
         if not rootOnScreen or not headOnScreen then
             if esp.box then esp.box.Visible = false end
             if esp.name then esp.name.Visible = false end
@@ -712,12 +874,10 @@ local function updateDrawingESP()
             if esp.skeleton then for _, bone in ipairs(esp.skeleton) do bone.line.Visible = false end end
             continue
         end
-
-        local boxHeight = math.abs(headScreen.Y - rootPos.Y) * 2
+        local boxHeight = math.abs(headScreen.Y - rootPos.Y) * 1.6
         local boxWidth = boxHeight * 0.6
         local boxX = rootPos.X - boxWidth / 2
         local boxY = rootPos.Y - boxHeight / 2
-
         if esp.box then
             esp.box.Visible = true
             esp.box.Position = Vector2.new(boxX, boxY)
@@ -725,14 +885,12 @@ local function updateDrawingESP()
             esp.box.Color = Settings.espBoxColor
             esp.box.Thickness = Settings.espBoxThickness
         end
-
         if esp.name then
             esp.name.Visible = true
             esp.name.Position = Vector2.new(rootPos.X, boxY - 16)
             esp.name.Text = plr.Name
             esp.name.Color = Settings.espNameColor
         end
-
         if esp.health then
             esp.health.Visible = true
             esp.health.Position = Vector2.new(boxX + boxWidth + 5, boxY)
@@ -740,7 +898,6 @@ local function updateDrawingESP()
             esp.health.Text = math.floor(hum.Health) .. "/" .. math.floor(hum.MaxHealth)
             esp.health.Color = Color3.new(1 - hpPercent, hpPercent, 0)
         end
-
         if esp.level then
             local level = getPlayerLevel(plr)
             if level then
@@ -753,7 +910,6 @@ local function updateDrawingESP()
             esp.level.Visible = true
             esp.level.Position = Vector2.new(rootPos.X, boxY - (esp.name and 32 or 16))
         end
-
         if esp.skeleton then
             for _, bone in ipairs(esp.skeleton) do
                 local partA = char:FindFirstChild(bone.partA)
@@ -766,111 +922,251 @@ local function updateDrawingESP()
                         bone.line.From = Vector2.new(posA.X, posA.Y)
                         bone.line.To = Vector2.new(posB.X, posB.Y)
                         bone.line.Color = Settings.espSkeletonColor
-                    else
-                        bone.line.Visible = false
-                    end
-                else
-                    bone.line.Visible = false
-                end
+                    else bone.line.Visible = false end
+                else bone.line.Visible = false end
             end
         end
     end
-
-    for plr in pairs(espObjects) do
-        if not plr.Parent then removeESP(plr) end
-    end
+    for plr in pairs(espObjects) do if not plr.Parent then removeESP(plr) end end
 end
-
 local function startESP()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player then createESP(plr) end
-    end
-    Players.PlayerAdded:Connect(function(plr)
-        if plr ~= player then createESP(plr) end
-    end)
+    for _, plr in ipairs(Players:GetPlayers()) do if plr ~= player then createESP(plr) end end
+    Players.PlayerAdded:Connect(function(plr) if plr ~= player then createESP(plr) end end)
     Players.PlayerRemoving:Connect(removeESP)
 end
-
 local function toggleESP(state)
     Settings.espEnabled = state
-    if state then
-        startESP()
-    else
-        for plr in pairs(espObjects) do removeESP(plr) end
-    end
+    if state then startESP() else for plr in pairs(espObjects) do removeESP(plr) end end
 end
-
-if Settings.espEnabled then
-    startESP()
-end
-
+if Settings.espEnabled then startESP() end
 RunService.RenderStepped:Connect(updateDrawingESP)
 
--- ==================== TRACERS ====================
-if drawingSupported then
-    local function getStart()
-        if Settings.tracerOrigin=="Gun" then
-            local tool = character:FindFirstChildOfClass("Tool")
-            if tool then
-                local handle = tool:FindFirstChild("Handle") or tool:FindFirstChild("Grip")
-                if handle then return handle.Position end
-            end
-            local head = character:FindFirstChild("Head")
-            if head then return head.Position end
-        elseif Settings.tracerOrigin=="Head" then
-            local head = character:FindFirstChild("Head")
-            if head then return head.Position end
-        elseif Settings.tracerOrigin=="Camera" then
-            return Camera.CFrame.Position
-        end
-        local root = character and character:FindFirstChild("HumanoidRootPart")
-        return root and root.Position+Vector3.new(0,1,0) or Vector3.new(0,0,0)
+-- ==================== HUD ====================
+local hudObjects = {}
+local lastFpsUpdate = tick()
+local fpsCount = 0
+local currentFPS = 60
+
+local function getFPSColor()
+    if Settings.hudDevice == "PC" then
+        if currentFPS <= 30 then return Color3.fromRGB(255,0,0)
+        elseif currentFPS <= 60 then return Color3.fromRGB(255,165,0)
+        elseif currentFPS <= 120 then return Color3.fromRGB(255,255,0)
+        elseif currentFPS <= 165 then return Color3.fromRGB(0,255,0)
+        else return Color3.fromRGB(0,255,128) end
+    else
+        if currentFPS <= 20 then return Color3.fromRGB(255,0,0)
+        elseif currentFPS <= 40 then return Color3.fromRGB(255,165,0)
+        elseif currentFPS <= 70 then return Color3.fromRGB(255,255,0)
+        elseif currentFPS <= 120 then return Color3.fromRGB(0,255,0)
+        else return Color3.fromRGB(0,255,128) end
     end
-    UserInputService.InputBegan:Connect(function(inp,gp)
-        if gp then return end
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 and Settings.tracerEnabled then
-            local start = getStart()
-            if start and Camera then
-                local line = Drawing.new("Line")
-                line.From = start
-                line.To = start + Camera.CFrame.LookVector * Settings.tracerLength
-                line.Color = Settings.tracerColor
-                line.Thickness = 2
-                line.Transparency = 1
-                line.Visible = true
-                task.delay(Settings.tracerDuration, function() line:Remove() end)
-            end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not Settings.hudEnabled then
+        for _, obj in pairs(hudObjects) do if obj then obj.Visible = false end end
+        return
+    end
+    fpsCount = fpsCount + 1
+    local now = tick()
+    if now - lastFpsUpdate >= 1 then
+        currentFPS = math.floor(fpsCount / (now - lastFpsUpdate))
+        fpsCount = 0
+        lastFpsUpdate = now
+    end
+
+    local ping = math.floor(player:GetNetworkPing() * 1000)
+    local gameName = "Unknown"
+    pcall(function()
+        gameName = MarketplaceService:GetProductInfo(game.PlaceId).Name
+    end)
+
+    local pingColor
+    if ping <= 50 then pingColor = Color3.fromRGB(0, 255, 0)
+    elseif ping <= 100 then pingColor = Color3.fromRGB(255, 255, 0)
+    elseif ping <= 200 then pingColor = Color3.fromRGB(255, 165, 0)
+    elseif ping <= 400 then pingColor = Color3.fromRGB(255, 0, 0)
+    else pingColor = Color3.fromRGB(139, 69, 19) end
+
+    local screenHeight = Camera.ViewportSize.Y
+    local yPos = 50
+
+    -- Ник
+    if Settings.hudShowNick then
+        if not hudObjects.nick then
+            hudObjects.nick = Drawing.new("Text")
+            hudObjects.nick.Size = 18; hudObjects.nick.Center = false; hudObjects.nick.Outline = true
+            hudObjects.nick.Color = Color3.fromRGB(255,255,255)
+        end
+        hudObjects.nick.Visible = true
+        hudObjects.nick.Position = Vector2.new(10, yPos)
+        hudObjects.nick.Text = "Player: " .. player.Name
+        yPos = yPos + 25
+    else if hudObjects.nick then hudObjects.nick.Visible = false end end
+
+    -- Game
+    if Settings.hudShowGame then
+        if not hudObjects.game then
+            hudObjects.game = Drawing.new("Text")
+            hudObjects.game.Size = 18; hudObjects.game.Center = false; hudObjects.game.Outline = true
+            hudObjects.game.Color = Color3.fromRGB(255,255,255)
+        end
+        hudObjects.game.Visible = true
+        hudObjects.game.Position = Vector2.new(10, yPos)
+        hudObjects.game.Text = "Game: " .. gameName
+        yPos = yPos + 25
+    else if hudObjects.game then hudObjects.game.Visible = false end end
+
+    -- Ping
+    if Settings.hudShowPing then
+        if not hudObjects.ping then
+            hudObjects.ping = Drawing.new("Text")
+            hudObjects.ping.Size = 18; hudObjects.ping.Center = false; hudObjects.ping.Outline = true
+        end
+        hudObjects.ping.Visible = true
+        hudObjects.ping.Position = Vector2.new(10, yPos)
+        hudObjects.ping.Text = "Ping: " .. ping .. " ms"
+        hudObjects.ping.Color = pingColor
+        yPos = yPos + 25
+    else if hudObjects.ping then hudObjects.ping.Visible = false end end
+
+    -- FPS
+    if Settings.hudShowFPS then
+        if not hudObjects.fps then
+            hudObjects.fps = Drawing.new("Text")
+            hudObjects.fps.Size = 18; hudObjects.fps.Center = false; hudObjects.fps.Outline = true
+        end
+        hudObjects.fps.Visible = true
+        hudObjects.fps.Position = Vector2.new(10, yPos)
+        hudObjects.fps.Text = "FPS: " .. currentFPS
+        hudObjects.fps.Color = getFPSColor()
+        yPos = yPos + 25
+    else if hudObjects.fps then hudObjects.fps.Visible = false end end
+
+    -- Title
+    if Settings.hudShowTitle then
+        if not hudObjects.title then
+            hudObjects.title = Drawing.new("Text")
+            hudObjects.title.Size = 20; hudObjects.title.Center = false; hudObjects.title.Outline = true
+            hudObjects.title.Color = Color3.fromRGB(180, 0, 255)
+        end
+        hudObjects.title.Visible = true
+        hudObjects.title.Position = Vector2.new(10, screenHeight - 45)
+        hudObjects.title.Text = "FazZzeta Rivals"
+    else if hudObjects.title then hudObjects.title.Visible = false end end
+
+    -- Version
+    if Settings.hudShowVersion then
+        if not hudObjects.version then
+            hudObjects.version = Drawing.new("Text")
+            hudObjects.version.Size = 18; hudObjects.version.Center = false; hudObjects.version.Outline = true
+            hudObjects.version.Color = Color3.fromRGB(200, 255, 0)
+        end
+        hudObjects.version.Visible = true
+        hudObjects.version.Position = Vector2.new(10, screenHeight - 22)
+        hudObjects.version.Text = "v2.2"
+    else if hudObjects.version then hudObjects.version.Visible = false end end
+end)
+
+-- ==================== TRACERS ====================
+local TracerFolder = Instance.new("Folder")
+TracerFolder.Name = "FazZzetaTracers"
+TracerFolder.Parent = Workspace
+
+local function createTracerRay()
+    if not Settings.tracerEnabled then return end
+    if not Camera then return end
+    local startPos = Camera.CFrame.Position
+    local direction = Camera.CFrame.LookVector
+    local length = Settings.tracerLength
+    local rayPart = Instance.new("Part")
+    rayPart.Name = "TracerRay"
+    rayPart.Anchored = true
+    rayPart.CanCollide = false
+    rayPart.CanTouch = false
+    rayPart.Material = Enum.Material.Neon
+    rayPart.Color = Settings.tracerColor
+    rayPart.Transparency = 0.3
+    rayPart.Size = Vector3.new(0.1, 0.1, length)
+    rayPart.CFrame = CFrame.new(startPos + direction * length/2, startPos + direction * length)
+    rayPart.Parent = TracerFolder
+    task.delay(Settings.tracerDuration, function() if rayPart then rayPart:Destroy() end end)
+end
+
+UserInputService.InputBegan:Connect(function(inp, gp)
+    if gp then return end
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 then createTracerRay() end
+end)
+
+-- ==================== RPG DODGE BLOCK ====================
+local RPG_Block = { Enabled = Settings.rpgBlockEnabled, ZoneSize = Settings.rpgBlockSize }
+local activeRPGZones = {}
+local function blockHealing(char)
+    local hum = char:FindFirstChild("Humanoid")
+    if hum then
+        hum:SetAttribute("RPG_Block_Heal", true)
+        local oldHealth = hum.Health
+        local conn = hum.HealthChanged:Connect(function(newHealth)
+            if newHealth > oldHealth and hum:GetAttribute("RPG_Block_Heal") then hum.Health = oldHealth end
+            oldHealth = hum.Health
+        end)
+        return conn
+    end
+end
+local function onRPGZoneTouched(projectile, zone, otherPart)
+    local char = otherPart.Parent
+    if not char or not char:IsA("Model") then return end
+    local player = Players:GetPlayerFromCharacter(char)
+    if not player then return end
+    local hum = char:FindFirstChild("Humanoid")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not hum or not root then return end
+    local oldWalkSpeed, oldJumpPower = hum.WalkSpeed, hum.JumpPower
+    hum.WalkSpeed, hum.JumpPower = 0, 0
+    local healConn = blockHealing(char)
+    local data = { oldWalkSpeed = oldWalkSpeed, oldJumpPower = oldJumpPower, healConn = healConn }
+    local touchEndedConn = zone.TouchEnded:Connect(function(part)
+        if part.Parent == char then
+            hum.WalkSpeed, hum.JumpPower = data.oldWalkSpeed, data.oldJumpPower
+            hum:SetAttribute("RPG_Block_Heal", false)
+            if data.healConn then data.healConn:Disconnect() end
+            touchEndedConn:Disconnect()
+        end
+    end)
+    local projectileRemovedConn = projectile.AncestryChanged:Connect(function()
+        if not projectile:IsDescendantOf(Workspace) then
+            hum.WalkSpeed, hum.JumpPower = data.oldWalkSpeed, data.oldJumpPower
+            hum:SetAttribute("RPG_Block_Heal", false)
+            if data.healConn then data.healConn:Disconnect() end
+            projectileRemovedConn:Disconnect()
+            if zone then zone:Destroy() end
         end
     end)
 end
-
--- ==================== DEVICE SPOOF ====================
-local function setDevice(dev)
-    local success = false
-    local playerGui = player:FindFirstChild("PlayerGui")
-    if playerGui then
-        for _,obj in ipairs(playerGui:GetDescendants()) do
-            if obj:IsA("StringValue") and obj.Name:lower():find("device") then obj.Value=dev; success=true; break end
-        end
-    end
-    if not success then
-        local backpack = player:FindFirstChild("Backpack")
-        if backpack then
-            for _,obj in ipairs(backpack:GetDescendants()) do
-                if obj:IsA("StringValue") and obj.Name:lower():find("device") then obj.Value=dev; success=true; break end
+local function onNewProjectile(obj)
+    if not RPG_Block.Enabled then return end
+    if not obj:IsA("BasePart") then return end
+    local name = obj.Name:lower()
+    if name:find("rocket") or name:find("projectile") or name:find("rpg") then
+        local zone = Instance.new("Part")
+        zone.Shape = Enum.PartType.Ball
+        zone.Size = Vector3.new(RPG_Block.ZoneSize, RPG_Block.ZoneSize, RPG_Block.ZoneSize)
+        zone.CanCollide, zone.Transparency, zone.Anchored, zone.CanTouch = true, 1, false, true
+        zone.Parent = Workspace
+        local weld = Instance.new("WeldConstraint")
+        weld.Part0, weld.Part1, weld.Parent = zone, obj, zone
+        zone.Touched:Connect(function(part) onRPGZoneTouched(obj, zone, part) end)
+        activeRPGZones[obj] = zone
+        obj.AncestryChanged:Connect(function()
+            if not obj:IsDescendantOf(Workspace) then
+                if activeRPGZones[obj] then activeRPGZones[obj]:Destroy(); activeRPGZones[obj] = nil end
             end
-        end
+        end)
     end
-    if not success and playerGui then
-        local new = Instance.new("StringValue")
-        new.Name = "Device"
-        new.Value = dev
-        new.Parent = playerGui
-        success = true
-    end
-    if not success then player:SetAttribute("Device", dev) end
 end
-local function setDeviceIndex(idx) if idx<1 then idx=#Settings.devices end; if idx>#Settings.devices then idx=1 end; if setDevice(Settings.devices[idx]) then Settings.deviceIndex=idx end end
+Workspace.DescendantAdded:Connect(onNewProjectile)
+for _, v in ipairs(Workspace:GetDescendants()) do onNewProjectile(v) end
 
 -- ==================== SKIN CHANGER ====================
 local weaponModels = player.PlayerScripts.Assets.ViewModels.Weapons:GetChildren()
@@ -908,18 +1204,264 @@ local function applyWeaponSkin(wn, col, trans, mat, wrapTex, wrapMat, ref, useCo
     end
 end
 
+-- ==================== АТМОСФЕРНЫЙ ВАЙБ (исправлено) ====================
+local snowEmitters = {}
+local winterAtmosphereObj, winterSky, winterMoon
+local nightSkyboxId = "rbxassetid://9992021469"
+local moonTextureId = "rbxassetid://7534261274"
+
+local function getOrCreateSky()
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("Sky") then return obj end
+    end
+    local newSky = Instance.new("Sky")
+    newSky.Parent = Lighting
+    return newSky
+end
+
+local function createMoon()
+    if winterMoon and winterMoon.Parent then winterMoon:Destroy() end
+    local moon = Instance.new("Part")
+    moon.Name = "WinterMoon"
+    moon.Size = Vector3.new(8, 8, 1)
+    moon.Shape = Enum.PartType.Ball
+    moon.Anchored = true
+    moon.CanCollide = false
+    moon.Transparency = 0.2
+    moon.Material = Enum.Material.Neon
+    moon.Color = Color3.fromRGB(220, 240, 255)
+    local light = Instance.new("PointLight")
+    light.Range = 60
+    light.Brightness = 2
+    light.Color = Color3.fromRGB(180, 200, 255)
+    light.Shadows = true
+    light.Parent = moon
+    local decal = Instance.new("Decal")
+    decal.Texture = moonTextureId
+    decal.Face = Enum.NormalId.Front
+    decal.Parent = moon
+    moon.Parent = Lighting
+    moon.CFrame = CFrame.new(2000, 400, 0)
+    return moon
+end
+
+local function createStarfield()
+    local starPart = Instance.new("Part")
+    starPart.Name = "StarfieldPart"
+    starPart.Size = Vector3.new(500, 1, 500)
+    starPart.Anchored = true
+    starPart.CanCollide = false
+    starPart.Transparency = 1
+    starPart.Parent = Workspace
+    starPart.CFrame = CFrame.new(0, 350, 0)
+    local stars = Instance.new("ParticleEmitter")
+    stars.Name = "Stars"
+    stars.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+    stars.Rate = 400
+    stars.Lifetime = NumberRange.new(10, 20)
+    stars.SpreadAngle = Vector2.new(360, 360)
+    stars.VelocityInheritance = 0
+    stars.Speed = NumberRange.new(0, 0.5)
+    stars.Rotation = NumberRange.new(0, 360)
+    stars.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.2),
+        NumberSequenceKeypoint.new(1, 0.4)
+    })
+    stars.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.2),
+        NumberSequenceKeypoint.new(1, 0.8)
+    })
+    stars.Color = ColorSequence.new(Color3.fromRGB(255, 255, 200))
+    stars.LightEmission = 0.5
+    stars.Enabled = true
+    stars.Parent = starPart
+    return stars, starPart
+end
+
+local function createSnowstorm()
+    local snowPart = Instance.new("Part")
+    snowPart.Name = "SnowEmitter"
+    snowPart.Size = Vector3.new(30, 1, 30)
+    snowPart.Anchored = true
+    snowPart.CanCollide = false
+    snowPart.Transparency = 1
+    snowPart.Parent = Workspace
+    local snow = Instance.new("ParticleEmitter")
+    snow.Name = "Snowflakes"
+    snow.Texture = "rbxasset://textures/particles/snowflake.png"
+    snow.Rate = 350
+    snow.SpreadAngle = Vector2.new(360, 360)
+    snow.Lifetime = NumberRange.new(4, 7)
+    snow.Speed = NumberRange.new(1.5, 4)
+    snow.Rotation = NumberRange.new(0, 360)
+    snow.RotSpeed = NumberRange.new(-20, 20)
+    snow.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.2),
+        NumberSequenceKeypoint.new(0.5, 0.4),
+        NumberSequenceKeypoint.new(1, 0.25)
+    })
+    snow.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.3),
+        NumberSequenceKeypoint.new(0.6, 0.5),
+        NumberSequenceKeypoint.new(1, 0.9)
+    })
+    snow.Color = ColorSequence.new(Color3.fromRGB(240, 248, 255))
+    snow.LightEmission = 0.15
+    snow.Enabled = true
+    snow.Parent = snowPart
+    local bigSnowPart = Instance.new("Part")
+    bigSnowPart.Name = "BigSnowEmitter"
+    bigSnowPart.Size = Vector3.new(40, 1, 40)
+    bigSnowPart.Anchored = true
+    bigSnowPart.CanCollide = false
+    bigSnowPart.Transparency = 1
+    bigSnowPart.Parent = Workspace
+    local bigSnow = Instance.new("ParticleEmitter")
+    bigSnow.Name = "BigSnowflakes"
+    bigSnow.Texture = "rbxasset://textures/particles/snowflake.png"
+    bigSnow.Rate = 80
+    bigSnow.SpreadAngle = Vector2.new(360, 360)
+    bigSnow.Lifetime = NumberRange.new(6, 10)
+    bigSnow.Speed = NumberRange.new(0.8, 2.5)
+    bigSnow.Rotation = NumberRange.new(0, 360)
+    bigSnow.RotSpeed = NumberRange.new(-10, 10)
+    bigSnow.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.5),
+        NumberSequenceKeypoint.new(1, 0.7)
+    })
+    bigSnow.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.2),
+        NumberSequenceKeypoint.new(1, 0.7)
+    })
+    bigSnow.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+    bigSnow.Enabled = true
+    bigSnow.Parent = bigSnowPart
+    local followConnection = RunService.RenderStepped:Connect(function()
+        if Settings.winterEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local pos = root.Position
+            snowPart.CFrame = CFrame.new(pos.X, pos.Y + 25, pos.Z)
+            bigSnowPart.CFrame = CFrame.new(pos.X, pos.Y + 18, pos.Z)
+        end
+    end)
+    table.insert(snowEmitters, {part = snowPart, emitter = snow, conn = followConnection})
+    table.insert(snowEmitters, {part = bigSnowPart, emitter = bigSnow})
+end
+
+local function enableWinter()
+    -- сначала убираем всё, что было
+    for _, data in ipairs(snowEmitters) do
+        if data.conn then data.conn:Disconnect() end
+        if data.part then data.part:Destroy() end
+    end
+    snowEmitters = {}
+    if winterAtmosphereObj then winterAtmosphereObj:Destroy(); winterAtmosphereObj = nil end
+    if winterMoon then winterMoon:Destroy(); winterMoon = nil end
+    if winterSky then
+        winterSky.SkyboxBk = ""
+        winterSky.SkyboxDn = ""
+        winterSky.SkyboxFt = ""
+        winterSky.SkyboxLf = ""
+        winterSky.SkyboxRt = ""
+        winterSky.SkyboxUp = ""
+        winterSky = nil
+    end
+
+    -- создаём снова
+    Settings.winterEnabled = true
+    Lighting.ClockTime = 1.5
+    Lighting.Brightness = 0.6
+    Lighting.Ambient = Color3.fromRGB(30, 35, 55)
+    Lighting.OutdoorAmbient = Color3.fromRGB(40, 45, 70)
+    Lighting.ShadowSoftness = 0.6
+    Lighting.GlobalShadows = true
+    Lighting.FogStart = 10
+    Lighting.FogEnd = 200
+    Lighting.FogColor = Color3.fromRGB(70, 90, 120)
+
+    winterAtmosphereObj = Instance.new("Atmosphere")
+    winterAtmosphereObj.Parent = Lighting
+    winterAtmosphereObj.Density = 0.45
+    winterAtmosphereObj.Offset = 0.3
+    winterAtmosphereObj.Color = Color3.fromRGB(100, 130, 170)
+    winterAtmosphereObj.Decay = Color3.fromRGB(90, 110, 150)
+    winterAtmosphereObj.Glare = 0.4
+    winterAtmosphereObj.Haze = 0.7
+
+    winterMoon = createMoon()
+    winterSky = getOrCreateSky()
+    winterSky.SkyboxBk = nightSkyboxId
+    winterSky.SkyboxDn = nightSkyboxId
+    winterSky.SkyboxFt = nightSkyboxId
+    winterSky.SkyboxLf = nightSkyboxId
+    winterSky.SkyboxRt = nightSkyboxId
+    winterSky.SkyboxUp = nightSkyboxId
+
+    local stars, starPart = createStarfield()
+    table.insert(snowEmitters, {part = starPart, emitter = stars})
+    createSnowstorm()
+end
+
+local function disableWinter()
+    Settings.winterEnabled = false
+    for _, data in ipairs(snowEmitters) do
+        if data.conn then data.conn:Disconnect() end
+        if data.part then data.part:Destroy() end
+    end
+    snowEmitters = {}
+
+    Lighting.ClockTime = 14
+    Lighting.Brightness = 3
+    Lighting.Ambient = Color3.new(0, 0, 0)
+    Lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
+    Lighting.ShadowSoftness = 0.2
+    Lighting.GlobalShadows = false
+    Lighting.FogStart = 0
+    Lighting.FogEnd = 100000
+    Lighting.FogColor = Color3.new(1, 1, 1)
+
+    if winterAtmosphereObj then winterAtmosphereObj:Destroy(); winterAtmosphereObj = nil end
+    if winterMoon then winterMoon:Destroy(); winterMoon = nil end
+    if winterSky then
+        winterSky.SkyboxBk = ""
+        winterSky.SkyboxDn = ""
+        winterSky.SkyboxFt = ""
+        winterSky.SkyboxLf = ""
+        winterSky.SkyboxRt = ""
+        winterSky.SkyboxUp = ""
+    end
+end
+
+local function toggleWinter()
+    if Settings.winterEnabled then disableWinter() else enableWinter() end
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        toggleWinter()
+    end
+end)
+
+player.Chatted:Connect(function(msg)
+    if msg:lower() == "/winter" then
+        toggleWinter()
+    end
+end)
+
 -- ==================== GUI FLUENT ====================
 local Window = Fluent:CreateWindow({
-    Title = "Fazeta Rivals",
-    SubTitle = "2.0.0 (Drawing ESP)",
+    Title = "FazZzeta Rivals",
+    SubTitle = "v2.2",
     TabWidth = 120,
-    Size = UDim2.fromOffset(520, 480),
+    Size = UDim2.fromOffset(520, 580),
     Acrylic = false,
     MinimizeKey = Enum.KeyCode.RightShift
 })
 local Tabs = {
     Aimbot = Window:AddTab({ Title = "Aimbot", Icon = "crosshair" }),
     Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
+    World = Window:AddTab({ Title = "World", Icon = "globe" }),
     Player = Window:AddTab({ Title = "Player", Icon = "user" }),
     Teleport = Window:AddTab({ Title = "Teleport", Icon = "map" }),
     Misc = Window:AddTab({ Title = "Misc", Icon = "sliders" }),
@@ -927,12 +1469,12 @@ local Tabs = {
 }
 
 -- Aimbot Tab
-local aimSec = Tabs.Aimbot:AddSection("Aimbot")
+local aimSec = Tabs.Aimbot:AddSection("Main Aimbot")
 aimSec:AddToggle("aimbotToggle", {Title="Aimbot", Default=Settings.aimbotEnabled, Callback=toggleAimbot})
 aimSec:AddToggle("aimbotRMBToggle", {Title="Aimbot on RMB Hold", Default=Settings.aimbotOnRMB, Callback=function(v) Settings.aimbotOnRMB=v end})
 aimSec:AddSlider("aimbotDistSlider", {Title="Distance", Min=10, Max=10000, Default=Settings.aimbotDistance, Rounding=0, Callback=function(v) Settings.aimbotDistance=v end})
 aimSec:AddSlider("aimbotStrengthSlider", {Title="Smoothness", Min=0.1, Max=1, Default=Settings.aimbotSmoothness, Precision=2, Rounding=2, Callback=function(v) Settings.aimbotSmoothness=v end})
-aimSec:AddDropdown("aimPartDropdown", {Title="Aim Part", Values={"Head","Torso"}, Default=Settings.aimbotTargetPart=="Head" and 1 or 2, Callback=function(v) Settings.aimbotTargetPart=v end})
+aimSec:AddDropdown("aimPartDropdown", {Title="Aim Part", Values={"Head","Torso"}, Default="Head", Callback=function(v) Settings.aimbotTargetPart=v end})
 aimSec:AddToggle("wallCheckToggle", {Title="Wall Check", Default=Settings.aimbotIgnoreWalls, Callback=function(v) Settings.aimbotIgnoreWalls=v end})
 aimSec:AddToggle("teamCheckToggle", {Title="Team Check", Default=Settings.teamCheck, Callback=function(v) Settings.teamCheck=v end})
 aimSec:AddToggle("antiKatanaToggle", {Title="Anti-Katana", Default=Settings.antiKatana, Callback=function(v) Settings.antiKatana=v end})
@@ -950,14 +1492,13 @@ local trigSec = Tabs.Aimbot:AddSection("Triggerbot")
 trigSec:AddToggle("triggerbotToggle", {Title="Triggerbot", Default=Settings.triggerbotEnabled, Callback=toggleTriggerbot})
 trigSec:AddSlider("triggerDelaySlider", {Title="Delay (ms)", Min=50, Max=500, Default=Settings.currentTriggerDelay, Rounding=0, Callback=function(v) Settings.currentTriggerDelay=v end})
 
-local rageSec = Tabs.Aimbot:AddSection("Rage Bot")
-rageSec:AddToggle("rageBotToggle", {Title="Rage Bot (Master)", Default=Settings.rageBotEnabled, Callback=toggleRageBot})
-rageSec:AddToggle("rageAimbotToggle", {Title="Aimbot (in Rage)", Default=Settings.rageAimbot, Callback=function(v) Settings.rageAimbot=v; if Settings.rageBotEnabled then applyRage() end end})
-rageSec:AddToggle("rageTriggerbotToggle", {Title="Triggerbot (in Rage)", Default=Settings.rageTriggerbot, Callback=function(v) Settings.rageTriggerbot=v; if Settings.rageBotEnabled then applyRage() end end})
-rageSec:AddToggle("rageWallPenToggle", {Title="Shoot through walls", Default=Settings.rageWallPen, Callback=function(v) Settings.rageWallPen=v; if Settings.rageBotEnabled then applyRage() end end})
-rageSec:AddToggle("rageSwitchEmptyToggle", {Title="Switch to secondary on empty", Default=Settings.rageSwitchOnEmpty, Callback=function(v) Settings.rageSwitchOnEmpty=v end})
-rageSec:AddSlider("rageShootDelaySlider", {Title="Shoot delay (ms)", Min=0, Max=1000, Default=Settings.rageShootDelay, Rounding=0, Callback=function(v) Settings.rageShootDelay=v end})
-rageSec:AddDropdown("rageHitPartDropdown", {Title="Hit part", Values={"Head","Torso"}, Default=Settings.rageHitPart=="Head" and 1 or 2, Callback=function(v) Settings.rageHitPart=v end})
+local silentSec = Tabs.Aimbot:AddSection("Silent Aim & FOV")
+silentSec:AddToggle("silentAimToggle", {Title="Silent Aim", Default=Settings.silentAimEnabled, Callback=function(v) Settings.silentAimEnabled=v end})
+silentSec:AddToggle("silentAutoFire", {Title="Auto-Fire on Hold LMB", Default=Settings.silentAutoFire, Callback=function(v) Settings.silentAutoFire=v end})
+silentSec:AddToggle("fovEnable", {Title="Limit by FOV Circle", Default=Settings.silentFOVEnabled, Callback=function(v) Settings.silentFOVEnabled=v end})
+silentSec:AddSlider("fovRadius", {Title="FOV Radius (px)", Min=5, Max=2000, Default=Settings.silentFOVRadius, Rounding=0, Callback=function(v) Settings.silentFOVRadius=v end})
+silentSec:AddColorpicker("fovColor", {Title="FOV Color", Default=Settings.silentFOVColor, Callback=function(v) Settings.silentFOVColor=v end})
+silentSec:AddToggle("showCircle", {Title="Show FOV Circle", Default=Settings.showSilentFOV, Callback=function(v) Settings.showSilentFOV=v end})
 
 local specSec = Tabs.Aimbot:AddSection("Special Modes")
 specSec:AddToggle("shotgunToggle", {Title="Shotgun Mode", Default=Settings.shotgunModeEnabled, Callback=function(v) Settings.shotgunModeEnabled=v end})
@@ -969,34 +1510,50 @@ specSec:AddSlider("daggerDistSlider", {Title="Parry Distance", Min=5, Max=30, De
 local espSec = Tabs.Visuals:AddSection("ESP (Drawing)")
 espSec:AddToggle("espToggle", {Title="Enable ESP", Default=Settings.espEnabled, Callback=toggleESP})
 espSec:AddSlider("espDistSlider", {Title="Max Distance", Min=100, Max=5000, Default=Settings.espDistance, Rounding=0, Callback=function(v) Settings.espDistance=v end})
-
 espSec:AddToggle("espBoxToggle", {Title="Show Box", Default=Settings.espBoxEnabled, Callback=function(v) Settings.espBoxEnabled=v end})
 espSec:AddColorpicker("espBoxColor", {Title="Box Color", Default=Settings.espBoxColor, Callback=function(v) Settings.espBoxColor=v end})
 espSec:AddSlider("espBoxThickness", {Title="Box Thickness", Min=1, Max=5, Default=Settings.espBoxThickness, Rounding=0, Callback=function(v) Settings.espBoxThickness=v end})
-
 espSec:AddToggle("espNameToggle", {Title="Show Name", Default=Settings.espNameEnabled, Callback=function(v) Settings.espNameEnabled=v end})
 espSec:AddColorpicker("espNameColor", {Title="Name Color", Default=Settings.espNameColor, Callback=function(v) Settings.espNameColor=v end})
-
 espSec:AddToggle("espHealthToggle", {Title="Show Health", Default=Settings.espHealthEnabled, Callback=function(v) Settings.espHealthEnabled=v end})
-
 espSec:AddToggle("espLevelToggle", {Title="Show Level", Default=Settings.espLevelEnabled, Callback=function(v) Settings.espLevelEnabled=v end})
 espSec:AddToggle("espLevelColorByRank", {Title="Level Color by Rank", Default=Settings.espLevelColorByRank, Callback=function(v) Settings.espLevelColorByRank=v end})
 espSec:AddColorpicker("espLevelColor", {Title="Level Color (static)", Default=Settings.espLevelColor, Callback=function(v) Settings.espLevelColor=v end})
-
 espSec:AddToggle("espSkeletonToggle", {Title="Show Skeleton", Default=Settings.espSkeletonEnabled, Callback=function(v) Settings.espSkeletonEnabled=v end})
 espSec:AddColorpicker("espSkeletonColor", {Title="Skeleton Color", Default=Settings.espSkeletonColor, Callback=function(v) Settings.espSkeletonColor=v end})
-
-local tracerSec = Tabs.Visuals:AddSection("Tracers (Drawing)")
-tracerSec:AddToggle("tracerToggle", {Title="Tracers", Default=Settings.tracerEnabled, Callback=function(v) Settings.tracerEnabled=v end})
-tracerSec:AddDropdown("tracerOriginDropdown", {Title="Origin", Values={"Gun","Head","Camera"}, Default=Settings.tracerOrigin=="Gun" and 1 or Settings.tracerOrigin=="Head" and 2 or 3, Callback=function(v) Settings.tracerOrigin=v end})
-tracerSec:AddSlider("tracerLengthSlider", {Title="Length", Min=100, Max=1000, Default=Settings.tracerLength, Rounding=0, Callback=function(v) Settings.tracerLength=v end})
-tracerSec:AddColorpicker("tracerColorPicker", {Title="Color", Default=Settings.tracerColor, Callback=function(v) Settings.tracerColor=v end})
 
 local effectsSec = Tabs.Visuals:AddSection("Effects")
 effectsSec:AddToggle("noFlashToggle", {Title="No Flash", Default=Settings.noFlash, Callback=function(v) Settings.noFlash=v end})
 effectsSec:AddToggle("noSmokeToggle", {Title="No Smoke", Default=Settings.noSmoke, Callback=function(v) Settings.noSmoke=v end})
 effectsSec:AddToggle("noRecoilToggle", {Title="No Recoil", Default=Settings.noRecoil, Callback=function(v) Settings.noRecoil=v end})
 effectsSec:AddToggle("noSpreadToggle", {Title="No Spread", Default=Settings.noSpread, Callback=function(v) Settings.noSpread=v end})
+
+local fireSec = Tabs.Visuals:AddSection("Fire Control")
+fireSec:AddButton({Title="Randomize Fire Colors", Callback=randomizeFireColors})
+
+-- World Tab
+local fogSec = Tabs.World:AddSection("Fog Control")
+fogSec:AddToggle("fogToggle", {Title="Enable Fog", Default=Settings.fogEnabled, Callback=function(v) Settings.fogEnabled=v; applyFog() end})
+fogSec:AddSlider("fogDensitySlider", {Title="Fog Density", Min=0, Max=1, Default=Settings.fogDensity, Rounding=2, Callback=function(v) Settings.fogDensity=v; applyFog() end})
+fogSec:AddColorpicker("fogColorPicker", {Title="Fog Color", Default=Settings.fogColor, Callback=function(v) Settings.fogColor=v; applyFog() end})
+
+local skySec = Tabs.World:AddSection("Sky (Custom)")
+skySec:AddToggle("skyToggle", {Title="Custom Sky Color", Default=Settings.skyEnabled, Callback=function(v) Settings.skyEnabled=v; applySky() end})
+skySec:AddColorpicker("skyColorPick", {Title="Sky Color", Default=Settings.skyColor, Callback=function(v) Settings.skyColor=v; if Settings.skyEnabled then applySky() end end})
+skySec:AddButton({Title="Note: External images not supported", Callback=function() end})
+
+local tracerSec = Tabs.World:AddSection("Tracers")
+tracerSec:AddToggle("tracerToggle", {Title="Enable Tracers", Default=Settings.tracerEnabled, Callback=function(v) Settings.tracerEnabled=v end})
+tracerSec:AddSlider("tracerLengthSlider", {Title="Length", Min=100, Max=1000, Default=Settings.tracerLength, Rounding=0, Callback=function(v) Settings.tracerLength=v end})
+tracerSec:AddSlider("tracerDurationSlider", {Title="Duration (sec)", Min=0.1, Max=10, Default=Settings.tracerDuration, Precision=2, Rounding=2, Callback=function(v) Settings.tracerDuration=v end})
+tracerSec:AddColorpicker("tracerColorPicker", {Title="Color", Default=Settings.tracerColor, Callback=function(v) Settings.tracerColor=v end})
+
+-- Атмосферный вайб
+local vibeSec = Tabs.World:AddSection("Атмосферный вайб")
+vibeSec:AddToggle("vibeToggle", {Title="Атмосферный вайб", Default=Settings.winterEnabled, Callback=function(v)
+    if v then enableWinter() else disableWinter() end
+end})
+vibeSec:AddButton({Title="Переключить вручную", Callback=toggleWinter})
 
 -- Player Tab
 local moveSec = Tabs.Player:AddSection("Movement")
@@ -1008,26 +1565,34 @@ moveSec:AddSlider("flySpeedSlider", {Title="Fly Speed V2/V3", Min=1, Max=1000, D
 moveSec:AddToggle("noclipToggle", {Title="Noclip", Default=Settings.noclipEnabled, Callback=toggleNoclip})
 moveSec:AddToggle("infJumpToggle", {Title="Infinite Jump", Default=Settings.infJumpEnabled, Callback=toggleInfJump})
 
+local slideSec = Tabs.Player:AddSection("Slide Boost")
+slideSec:AddToggle("slideToggle", {Title="Slide Boost", Default=Settings.slideBoostEnabled, Callback=function(v) Settings.slideBoostEnabled=v end})
+slideSec:AddSlider("slidePower", {Title="Boost Power (1-10)", Min=1, Max=10, Default=Settings.slideBoostPower, Rounding=0, Callback=function(v) Settings.slideBoostPower=v end})
+
+local jumpSec = Tabs.Player:AddSection("Jump Settings")
+jumpSec:AddSlider("infJumpPowerSlider", {Title="Jump Power", Min=10, Max=200, Default=Settings.infJumpPower, Rounding=0, Callback=function(v) Settings.infJumpPower=v end})
+
 local cameraSec = Tabs.Player:AddSection("Camera")
-cameraSec:AddToggle("fovToggle", {Title="Custom FOV", Default=Settings.fovEnabled, Callback=function(v) Settings.fovEnabled = v; if not v and Camera then Camera.FieldOfView = 70 end end})
-cameraSec:AddSlider("fovSlider", {Title="FOV Value", Min=30, Max=179, Default=Settings.customFOV, Rounding=0, Callback=function(v) Settings.customFOV = v; if Settings.fovEnabled and Camera then Camera.FieldOfView = v end end})
+cameraSec:AddToggle("fovToggle", {Title="Custom FOV", Default=Settings.fovEnabled, Callback=function(v) Settings.fovEnabled=v; if not v and Camera then Camera.FieldOfView=70 end end})
+cameraSec:AddSlider("fovSlider", {Title="FOV Value (max 120)", Min=30, Max=120, Default=Settings.customFOV, Rounding=0, Callback=function(v) Settings.customFOV=math.clamp(v,30,120); if Settings.fovEnabled and Camera then Camera.FieldOfView=Settings.customFOV end end})
 
 -- Teleport Tab
 local tpSec = Tabs.Teleport:AddSection("Auto Teleport")
 tpSec:AddToggle("tpToggle", {Title="Auto TP", Default=Settings.tpEnabled, Callback=toggleTP})
 tpSec:AddSlider("tpDistanceSlider", {Title="Distance", Min=1, Max=10, Default=Settings.tpDistance, Rounding=1, Callback=function(v) Settings.tpDistance=v end})
 tpSec:AddDropdown("tpPositionDropdown", {Title="Position", Values={"Front","Back","Up","Down"}, Default=1, Callback=function(v) Settings.tpPosition=v end})
-local randSec = Tabs.Teleport:AddSection("Random Teleport")
-randSec:AddToggle("randomTPToggle", {Title="Random TP", Default=randomTPActive, Callback=toggleRandomTP})
-local extraSec = Tabs.Teleport:AddSection("Extra")
-extraSec:AddButton({Title="TP 1000 Down", Callback=teleportDown})
+
+local upSec = Tabs.Teleport:AddSection("Vertical")
+upSec:AddButton({Title="TP 1000 Up", Callback=teleportUp})
+upSec:AddToggle("constantUpToggle", {Title="Constant TP Up", Default=Settings.constantTpUp, Callback=toggleConstantUp})
+
+local randSec = Tabs.Teleport:AddSection("Random TP")
+randSec:AddToggle("randomTPToggle", {Title="Random TP (around self)", Default=randomTPActive, Callback=toggleRandomTP})
+randSec:AddSlider("randomRadius", {Title="Max Radius", Min=10, Max=200, Default=Settings.randomTpRadius, Rounding=0, Callback=function(v) Settings.randomTpRadius=v end})
 
 -- Misc Tab
-local devSec = Tabs.Misc:AddSection("Device & AutoRun")
-devSec:AddDropdown("deviceDropdown", {Title="Device Spoof", Values=Settings.devices, Default=Settings.deviceIndex, Callback=function(v)
-    for i,name in ipairs(Settings.devices) do if name==v then setDeviceIndex(i) break end end
-end})
-devSec:AddToggle("autoRunToggle", {Title="AutoRun", Description="Enable all main features", Default=Settings.autoRunEnabled, Callback=function(state)
+local autorunSec = Tabs.Misc:AddSection("AutoRun")
+autorunSec:AddToggle("autoRunToggle", {Title="AutoRun", Description="Enable all main features", Default=Settings.autoRunEnabled, Callback=function(state)
     Settings.autoRunEnabled = state
     if state then
         if not Settings.aimbotEnabled then toggleAimbot(true) end
@@ -1050,13 +1615,18 @@ devSec:AddToggle("autoRunToggle", {Title="AutoRun", Description="Enable all main
     end
 end})
 
+local rpgSec = Tabs.Misc:AddSection("RPG Protection")
+rpgSec:AddToggle("rpgBlockToggle", {Title="Block RPG Zone", Default=Settings.rpgBlockEnabled, Callback=function(v) Settings.rpgBlockEnabled=v; RPG_Block.Enabled=v end})
+rpgSec:AddSlider("rpgZoneSizeSlider", {Title="Zone Size", Min=5, Max=25, Default=Settings.rpgBlockSize, Rounding=1, Callback=function(v) Settings.rpgBlockSize=v; RPG_Block.ZoneSize=v end})
+
+-- Skin Changer
 local skinSec = Tabs.Misc:AddSection("Skin Changer")
 local weaponDropdown = skinSec:AddDropdown("weaponDropdown", {Title="Weapon", Values=weaponNames, Default=1})
 local wrapDropdown = skinSec:AddDropdown("wrapDropdown", {Title="Wrap Texture", Values=filteredWraps, Default=#filteredWraps>0 and 1 or nil})
 local materialDropdown = skinSec:AddDropdown("materialDropdown", {Title="Material", Values=materialList, Default=1})
 local wrapMaterialDropdown = skinSec:AddDropdown("wrapMaterialDropdown", {Title="Wrap Material", Values=wrapVariantList, Default=#wrapVariantList>0 and 1 or nil})
 local colorPicker = skinSec:AddColorpicker("skinColorPicker", {Title="Color", Transparency=0, Default=Color3.fromRGB(255,255,255)})
-local reflectanceSlider = skinSec:AddSlider("reflectanceSlider", {Title="Reflectance", Min=0, Max=1, Default=0, Rounding=2, Callback=function(v) end})
+local reflectanceSlider = skinSec:AddSlider("reflectanceSlider", {Title="Reflectance", Min=0, Max=1, Default=0, Rounding=2})
 local applyAllToggle = skinSec:AddToggle("applyAllToggle", {Title="Apply to all weapons", Default=false})
 local useColorToggle = skinSec:AddToggle("useColorToggle", {Title="Apply Color", Default=false})
 local useMaterialToggle = skinSec:AddToggle("useMaterialToggle", {Title="Apply Material", Default=false})
@@ -1069,7 +1639,6 @@ end
 skinSec:AddButton({Title="Apply Skin", Callback=applySkin})
 skinSec:AddButton({Title="Randomize", Callback=function()
     colorPicker:SetValue(Color3.fromRGB(math.random(0,255), math.random(0,255), math.random(0,255)))
-    colorPicker.Transparency = math.random()
     reflectanceSlider:SetValue(math.random())
     materialDropdown:SetValue(materialList[math.random(#materialList)])
     if #filteredWraps>0 then wrapDropdown:SetValue(filteredWraps[math.random(#filteredWraps)]) end
@@ -1094,7 +1663,17 @@ skinSec:AddButton({Title="Remove Effects", Callback=function()
     end
 end})
 
--- Settings Tab (без AutoLoad)
+-- Settings Tab (HUD сюда перенесён)
+local hudSec = Tabs.Settings:AddSection("HUD")
+hudSec:AddToggle("hudToggle", {Title="Show HUD", Default=Settings.hudEnabled, Callback=function(v) Settings.hudEnabled=v end})
+hudSec:AddToggle("hudNick", {Title="Show Nickname", Default=Settings.hudShowNick, Callback=function(v) Settings.hudShowNick=v end})
+hudSec:AddToggle("hudGame", {Title="Show Game", Default=Settings.hudShowGame, Callback=function(v) Settings.hudShowGame=v end})
+hudSec:AddToggle("hudPing", {Title="Show Ping", Default=Settings.hudShowPing, Callback=function(v) Settings.hudShowPing=v end})
+hudSec:AddToggle("hudFPS", {Title="Show FPS", Default=Settings.hudShowFPS, Callback=function(v) Settings.hudShowFPS=v end})
+hudSec:AddToggle("hudTitle", {Title="Show Script Title", Default=Settings.hudShowTitle, Callback=function(v) Settings.hudShowTitle=v end})
+hudSec:AddToggle("hudVersion", {Title="Show Version", Default=Settings.hudShowVersion, Callback=function(v) Settings.hudShowVersion=v end})
+hudSec:AddDropdown("hudDevice", {Title="FPS Mode", Values={"PC", "Phone"}, Default=Settings.hudDevice, Callback=function(v) Settings.hudDevice=v end})
+
 local setSec = Tabs.Settings:AddSection("General")
 setSec:AddButton({Title="Reset All Settings", Callback=function()
     for k,v in pairs(Settings) do
@@ -1108,25 +1687,42 @@ end})
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
-SaveManager:SetFolder("FazetaRivals")
-InterfaceManager:SetFolder("FazetaRivals")
+SaveManager:SetFolder("FazZzetaRivals")
+InterfaceManager:SetFolder("FazZzetaRivals")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
 Window:SelectTab(1)
 
--- ==================== АВТОВОССТАНОВЛЕНИЕ ПОСЛЕ РЕСПАВНА ====================
+local windowVisible = true
+UserInputService.InputBegan:Connect(function(inp, gp)
+    if gp then return end
+    if inp.KeyCode == Enum.KeyCode.RightShift then
+        windowVisible = not windowVisible
+        Window:SetVisible(windowVisible)
+    end
+end)
+
+-- ==================== ОБРАБОТЧИК РЕСПАВНА (исправлен) ====================
 player.CharacterAdded:Connect(function(newChar)
+    setFlightState(false)
+    if bodyVelocity then bodyVelocity:Destroy(); bodyVelocity=nil end
+    removeSpeed()
+    speedController = nil
     character = newChar
     humanoid = newChar:WaitForChild("Humanoid")
     task.wait(0.5)
-    applySpeedState()
+
+    if Settings.speedEnabled then applySpeedState() end
     if Settings.noclipEnabled then applyNoclip(true) end
     if Settings.isFlying then setFlightState(true) end
     if Settings.aimbotEnabled then startAimbot() end
     if Settings.triggerbotEnabled then startTriggerbot() end
     if Settings.tpEnabled then startTP() end
     if randomTPActive then toggleRandomTP(true) end
+    if Settings.constantTpUp then toggleConstantUp(true) end
+    -- восстанавливаем атмосферу после смерти
+    if Settings.winterEnabled then enableWinter() end
 end)
 
 UserInputService.InputBegan:Connect(function(inp,gp)
@@ -1137,8 +1733,10 @@ UserInputService.InputBegan:Connect(function(inp,gp)
         if triggerbotConnection then triggerbotConnection:Disconnect() end
         if tpConnection then tpConnection:Disconnect() end
         if randomTPConnection then randomTPConnection:Disconnect() end
+        if constantUpConnection then constantUpConnection:Disconnect() end
         removeSpeed()
         if bodyVelocity then bodyVelocity:Destroy() end
+        disableWinter()
         updateStatus("Экстренное отключение")
         script:Destroy()
     end
@@ -1156,4 +1754,4 @@ if Settings.autoRunEnabled then
     updateStatus("AutoRun activated")
 end
 
-updateStatus("Fazeta Rivals 2.0.0 loaded. Press Right Shift to open menu.")
+updateStatus("FazZzeta Rivals v2.2 loaded. Right Shift to open menu.")
