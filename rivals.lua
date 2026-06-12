@@ -1,5 +1,3 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/a123456789tt/iddddddddddidj/refs/heads/main/rivals.lua"))()
-
 -- ==================== FAZZETA RIVALS v2.2 (Атмосферный вайб) ====================
 
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
