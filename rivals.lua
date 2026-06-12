@@ -1,11 +1,7 @@
--- ==================== FAZZETA RIVALS v2.2 (Атмосферный вайб) ====================
-
+-- ==================== FAZZETA RIVALS v2.2 (БЕЗ PLUS) ====================
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
-	
-
-
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -16,7 +12,6 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local MaterialService = game:GetService("MaterialService")
 local Lighting = game:GetService("Lighting")
 local MarketplaceService = game:GetService("MarketplaceService")
-local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -107,6 +102,115 @@ local Settings = {
     showSilentFOV = true,
     winterEnabled = false
 }
+
+-- ==================== ПРЕФИКСЫ (ТЕГИ) ====================
+local MARKER_FOLDER = "FazZzeta_Prefixes"
+local markerFolder = Workspace:FindFirstChild(MARKER_FOLDER) or Instance.new("Folder")
+markerFolder.Name = MARKER_FOLDER
+markerFolder.Parent = Workspace
+
+-- Свой маркер (чтобы другие видели, что ты используешь скрипт)
+local myMarker = markerFolder:FindFirstChild(player.Name) or Instance.new("StringValue")
+myMarker.Name = player.Name
+myMarker.Value = "Rivals User"
+myMarker.Parent = markerFolder
+
+-- Функция получения тега другого игрока
+local function getOtherPlayerTag(plr)
+    if plr == player then return "Rivals User" end
+    local marker = markerFolder:FindFirstChild(plr.Name)
+    if marker then
+        return marker.Value  -- "Rivals User"
+    else
+        return "фрик"
+    end
+end
+
+-- Свой билборд (тег над головой)
+local myBillboard = nil
+local function createMyBillboard()
+    if not character or not character:FindFirstChild("Head") then return end
+    if myBillboard then myBillboard:Destroy() end
+    local head = character.Head
+    myBillboard = Instance.new("BillboardGui")
+    myBillboard.Name = "MyPrefix"
+    myBillboard.Size = UDim2.new(0, 200, 0, 30)
+    myBillboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    myBillboard.AlwaysOnTop = true
+    myBillboard.MaxDistance = 1000
+    myBillboard.Parent = head
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1,0,1,0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.TextSize = 16
+    textLabel.TextColor3 = Color3.new(1,1,1)
+    textLabel.TextStrokeColor3 = Color3.new(0,0,0)
+    textLabel.TextStrokeTransparency = 0
+    textLabel.Text = "[Rivals User]" .. player.Name
+    textLabel.Parent = myBillboard
+end
+
+-- Билборды других игроков с проверкой видимости через стены
+local otherBillboards = {}
+local function shouldShowBillboard(part)
+    if not Camera then return true end
+    local origin = Camera.CFrame.Position
+    local direction = (part.Position - origin).Unit * 1000
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {character, Camera}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    local result = Workspace:Raycast(origin, direction, params)
+    if result and result.Instance then
+        local hitChar = result.Instance:FindFirstAncestorOfClass("Model")
+        if hitChar == part.Parent then return true end
+        return false
+    end
+    return true
+end
+
+local function updateOtherBillboards()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == player then continue end
+        local char = plr.Character
+        if not char or not char:FindFirstChild("Head") then
+            if otherBillboards[plr] then otherBillboards[plr].bb:Destroy() end
+            otherBillboards[plr] = nil
+            continue
+        end
+        local head = char.Head
+        local tag = getOtherPlayerTag(plr)
+        local existing = otherBillboards[plr]
+        if not existing then
+            local bb = Instance.new("BillboardGui")
+            bb.Name = "OtherPrefix"
+            bb.Size = UDim2.new(0, 200, 0, 30)
+            bb.StudsOffset = Vector3.new(0, 2.5, 0)
+            bb.AlwaysOnTop = true
+            bb.MaxDistance = 1000
+            bb.Parent = head
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1,0,1,0)
+            label.BackgroundTransparency = 1
+            label.Font = Enum.Font.SourceSansBold
+            label.TextSize = 16
+            label.TextColor3 = (tag == "Rivals User") and Color3.new(1,1,1) or Color3.fromRGB(0,200,200)
+            label.TextStrokeColor3 = Color3.new(0,0,0)
+            label.TextStrokeTransparency = 0
+            label.Text = "[" .. tag .. "]" .. plr.Name
+            label.Parent = bb
+            otherBillboards[plr] = {bb = bb, label = label}
+        else
+            existing.label.Text = "[" .. tag .. "]" .. plr.Name
+            existing.label.TextColor3 = (tag == "Rivals User") and Color3.new(1,1,1) or Color3.fromRGB(0,200,200)
+        end
+        otherBillboards[plr].bb.Enabled = shouldShowBillboard(head)
+    end
+end
+
+RunService.RenderStepped:Connect(updateOtherBillboards)
+player.CharacterAdded:Connect(function() task.wait(0.5); createMyBillboard() end)
+createMyBillboard()
 
 -- ==================== FIRE CONTROL ====================
 local fireEmitters = {}
@@ -200,8 +304,7 @@ local function canSee(targetPart)
     params.FilterType = Enum.RaycastFilterType.Blacklist
     local result = Workspace:Raycast(origin, direction, params)
     if result and result.Instance then
-        local hit = result.Instance
-        local hitChar = hit:FindFirstAncestorOfClass("Model")
+        local hitChar = result.Instance:FindFirstAncestorOfClass("Model")
         if hitChar and hitChar == targetPart.Parent then return true end
         return false
     end
@@ -249,7 +352,7 @@ RunService.RenderStepped:Connect(function()
     if Settings.fovEnabled and Camera then Camera.FieldOfView = math.clamp(Settings.customFOV, 30, 120) end
 end)
 
--- Fog & Sky (базовые)
+-- Fog
 local function applyFog()
     if Settings.winterEnabled then return end
     if Settings.fogEnabled then
@@ -353,7 +456,7 @@ function startAimbot()
         if Settings.aimbotEnabled and (not Settings.aimbotOnRMB or rmbHeld) and aimTarget and aimTarget.Parent then aimAt(aimTarget) end
     end)
 end
-local function toggleAimbot(s) Settings.aimbotEnabled = s; if s then startAimbot() else aimbotConnection:Disconnect(); cameraConnection:Disconnect(); aimTarget=nil end end
+local function toggleAimbot(s) Settings.aimbotEnabled = s; if s then startAimbot() else if aimbotConnection then aimbotConnection:Disconnect() end if cameraConnection then cameraConnection:Disconnect() end aimTarget=nil end end
 
 -- ==================== TRIGGERBOT ====================
 local triggerbotConnection, lastShot = nil, 0
@@ -388,7 +491,7 @@ function startTriggerbot()
         end
     end)
 end
-local function toggleTriggerbot(s) Settings.triggerbotEnabled = s; if s then startTriggerbot() else triggerbotConnection:Disconnect() end end
+local function toggleTriggerbot(s) Settings.triggerbotEnabled = s; if s then startTriggerbot() else if triggerbotConnection then triggerbotConnection:Disconnect() end end end
 
 -- ==================== SILENT AIM ====================
 local function getTargetPartForSilent(char)
@@ -802,6 +905,7 @@ local function createESP(plr)
         esp.name.Size = 16
         esp.name.Center = true
         esp.name.Outline = true
+        esp.name.OutlineColor = Color3.new(0,0,0)
         esp.name.Color = Settings.espNameColor
         esp.name.Visible = false
     end
@@ -809,6 +913,7 @@ local function createESP(plr)
         esp.health = Drawing.new("Text")
         esp.health.Size = 14
         esp.health.Outline = true
+        esp.health.OutlineColor = Color3.new(0,0,0)
         esp.health.Visible = false
     end
     if Settings.espLevelEnabled then
@@ -816,6 +921,7 @@ local function createESP(plr)
         esp.level.Size = 14
         esp.level.Center = true
         esp.level.Outline = true
+        esp.level.OutlineColor = Color3.new(0,0,0)
         esp.level.Visible = false
     end
     if Settings.espSkeletonEnabled then
@@ -941,7 +1047,7 @@ end
 if Settings.espEnabled then startESP() end
 RunService.RenderStepped:Connect(updateDrawingESP)
 
--- ==================== HUD ====================
+-- ==================== HUD (исправлен: чёрная обводка, порядок Game -> Ping) ====================
 local hudObjects = {}
 local lastFpsUpdate = tick()
 local fpsCount = 0
@@ -997,76 +1103,83 @@ RunService.RenderStepped:Connect(function()
         if not hudObjects.nick then
             hudObjects.nick = Drawing.new("Text")
             hudObjects.nick.Size = 18; hudObjects.nick.Center = false; hudObjects.nick.Outline = true
+            hudObjects.nick.OutlineColor = Color3.new(0,0,0)
             hudObjects.nick.Color = Color3.fromRGB(255,255,255)
         end
         hudObjects.nick.Visible = true
         hudObjects.nick.Position = Vector2.new(10, yPos)
         hudObjects.nick.Text = "Player: " .. player.Name
         yPos = yPos + 25
-    else if hudObjects.nick then hudObjects.nick.Visible = false end end
+    elseif hudObjects.nick then hudObjects.nick.Visible = false end
 
-    -- Game
+    -- Game (первым)
     if Settings.hudShowGame then
         if not hudObjects.game then
             hudObjects.game = Drawing.new("Text")
             hudObjects.game.Size = 18; hudObjects.game.Center = false; hudObjects.game.Outline = true
+            hudObjects.game.OutlineColor = Color3.new(0,0,0)
             hudObjects.game.Color = Color3.fromRGB(255,255,255)
         end
         hudObjects.game.Visible = true
         hudObjects.game.Position = Vector2.new(10, yPos)
         hudObjects.game.Text = "Game: " .. gameName
         yPos = yPos + 25
-    else if hudObjects.game then hudObjects.game.Visible = false end end
+    elseif hudObjects.game then hudObjects.game.Visible = false end
 
-    -- Ping
+    -- Ping (вторым)
     if Settings.hudShowPing then
         if not hudObjects.ping then
             hudObjects.ping = Drawing.new("Text")
             hudObjects.ping.Size = 18; hudObjects.ping.Center = false; hudObjects.ping.Outline = true
+            hudObjects.ping.OutlineColor = Color3.new(0,0,0)
         end
         hudObjects.ping.Visible = true
         hudObjects.ping.Position = Vector2.new(10, yPos)
         hudObjects.ping.Text = "Ping: " .. ping .. " ms"
         hudObjects.ping.Color = pingColor
         yPos = yPos + 25
-    else if hudObjects.ping then hudObjects.ping.Visible = false end end
+    elseif hudObjects.ping then hudObjects.ping.Visible = false end
 
     -- FPS
     if Settings.hudShowFPS then
         if not hudObjects.fps then
             hudObjects.fps = Drawing.new("Text")
             hudObjects.fps.Size = 18; hudObjects.fps.Center = false; hudObjects.fps.Outline = true
+            hudObjects.fps.OutlineColor = Color3.new(0,0,0)
+            hudObjects.fps.Color = Color3.new(1,1,1)
         end
         hudObjects.fps.Visible = true
         hudObjects.fps.Position = Vector2.new(10, yPos)
         hudObjects.fps.Text = "FPS: " .. currentFPS
         hudObjects.fps.Color = getFPSColor()
         yPos = yPos + 25
-    else if hudObjects.fps then hudObjects.fps.Visible = false end end
+    elseif hudObjects.fps then hudObjects.fps.Visible = false end
 
     -- Title
     if Settings.hudShowTitle then
         if not hudObjects.title then
             hudObjects.title = Drawing.new("Text")
             hudObjects.title.Size = 20; hudObjects.title.Center = false; hudObjects.title.Outline = true
+            hudObjects.title.OutlineColor = Color3.new(0,0,0)
             hudObjects.title.Color = Color3.fromRGB(180, 0, 255)
         end
         hudObjects.title.Visible = true
         hudObjects.title.Position = Vector2.new(10, screenHeight - 45)
         hudObjects.title.Text = "FazZzeta Rivals"
-    else if hudObjects.title then hudObjects.title.Visible = false end end
+    elseif hudObjects.title then hudObjects.title.Visible = false end
 
     -- Version
     if Settings.hudShowVersion then
         if not hudObjects.version then
             hudObjects.version = Drawing.new("Text")
             hudObjects.version.Size = 18; hudObjects.version.Center = false; hudObjects.version.Outline = true
+            hudObjects.version.OutlineColor = Color3.new(0,0,0)
             hudObjects.version.Color = Color3.fromRGB(200, 255, 0)
         end
         hudObjects.version.Visible = true
         hudObjects.version.Position = Vector2.new(10, screenHeight - 22)
         hudObjects.version.Text = "v2.2"
-    else if hudObjects.version then hudObjects.version.Visible = false end end
+    elseif hudObjects.version then hudObjects.version.Visible = false end
 end)
 
 -- ==================== TRACERS ====================
@@ -1093,7 +1206,6 @@ local function createTracerRay()
     rayPart.Parent = TracerFolder
     task.delay(Settings.tracerDuration, function() if rayPart then rayPart:Destroy() end end)
 end
-
 UserInputService.InputBegan:Connect(function(inp, gp)
     if gp then return end
     if inp.UserInputType == Enum.UserInputType.MouseButton1 then createTracerRay() end
@@ -1204,7 +1316,7 @@ local function applyWeaponSkin(wn, col, trans, mat, wrapTex, wrapMat, ref, useCo
     end
 end
 
--- ==================== АТМОСФЕРНЫЙ ВАЙБ (исправлено) ====================
+-- ==================== АТМОСФЕРНЫЙ ВАЙБ (доступен всем) ====================
 local snowEmitters = {}
 local winterAtmosphereObj, winterSky, winterMoon
 local nightSkyboxId = "rbxassetid://9992021469"
@@ -1349,7 +1461,6 @@ local function createSnowstorm()
 end
 
 local function enableWinter()
-    -- сначала убираем всё, что было
     for _, data in ipairs(snowEmitters) do
         if data.conn then data.conn:Disconnect() end
         if data.part then data.part:Destroy() end
@@ -1367,7 +1478,6 @@ local function enableWinter()
         winterSky = nil
     end
 
-    -- создаём снова
     Settings.winterEnabled = true
     Lighting.ClockTime = 1.5
     Lighting.Brightness = 0.6
@@ -1415,7 +1525,7 @@ local function disableWinter()
     Lighting.Ambient = Color3.new(0, 0, 0)
     Lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
     Lighting.ShadowSoftness = 0.2
-    Lighting.GlobalShadows = false
+    Lighting.GlobalShadows = true
     Lighting.FogStart = 0
     Lighting.FogEnd = 100000
     Lighting.FogColor = Color3.new(1, 1, 1)
@@ -1430,6 +1540,8 @@ local function disableWinter()
         winterSky.SkyboxRt = ""
         winterSky.SkyboxUp = ""
     end
+    applyFog()
+    applySky()
 end
 
 local function toggleWinter()
@@ -1540,7 +1652,6 @@ fogSec:AddColorpicker("fogColorPicker", {Title="Fog Color", Default=Settings.fog
 local skySec = Tabs.World:AddSection("Sky (Custom)")
 skySec:AddToggle("skyToggle", {Title="Custom Sky Color", Default=Settings.skyEnabled, Callback=function(v) Settings.skyEnabled=v; applySky() end})
 skySec:AddColorpicker("skyColorPick", {Title="Sky Color", Default=Settings.skyColor, Callback=function(v) Settings.skyColor=v; if Settings.skyEnabled then applySky() end end})
-skySec:AddButton({Title="Note: External images not supported", Callback=function() end})
 
 local tracerSec = Tabs.World:AddSection("Tracers")
 tracerSec:AddToggle("tracerToggle", {Title="Enable Tracers", Default=Settings.tracerEnabled, Callback=function(v) Settings.tracerEnabled=v end})
@@ -1548,12 +1659,11 @@ tracerSec:AddSlider("tracerLengthSlider", {Title="Length", Min=100, Max=1000, De
 tracerSec:AddSlider("tracerDurationSlider", {Title="Duration (sec)", Min=0.1, Max=10, Default=Settings.tracerDuration, Precision=2, Rounding=2, Callback=function(v) Settings.tracerDuration=v end})
 tracerSec:AddColorpicker("tracerColorPicker", {Title="Color", Default=Settings.tracerColor, Callback=function(v) Settings.tracerColor=v end})
 
--- Атмосферный вайб
 local vibeSec = Tabs.World:AddSection("Атмосферный вайб")
-vibeSec:AddToggle("vibeToggle", {Title="Атмосферный вайб", Default=Settings.winterEnabled, Callback=function(v)
-    if v then enableWinter() else disableWinter() end
+vibeSec:AddToggle("vibeToggle", {Title="Атмосферный вайб (зима, снег)", Default=Settings.winterEnabled, Callback=function(state)
+    if state then enableWinter() else disableWinter() end
 end})
-vibeSec:AddButton({Title="Переключить вручную", Callback=toggleWinter})
+vibeSec:AddButton({Title="Переключить вручную (или /winter)", Callback=toggleWinter})
 
 -- Player Tab
 local moveSec = Tabs.Player:AddSection("Movement")
@@ -1663,7 +1773,7 @@ skinSec:AddButton({Title="Remove Effects", Callback=function()
     end
 end})
 
--- Settings Tab (HUD сюда перенесён)
+-- Settings Tab (HUD)
 local hudSec = Tabs.Settings:AddSection("HUD")
 hudSec:AddToggle("hudToggle", {Title="Show HUD", Default=Settings.hudEnabled, Callback=function(v) Settings.hudEnabled=v end})
 hudSec:AddToggle("hudNick", {Title="Show Nickname", Default=Settings.hudShowNick, Callback=function(v) Settings.hudShowNick=v end})
@@ -1703,7 +1813,7 @@ UserInputService.InputBegan:Connect(function(inp, gp)
     end
 end)
 
--- ==================== ОБРАБОТЧИК РЕСПАВНА (исправлен) ====================
+-- ==================== ОБРАБОТЧИК РЕСПАВНА ====================
 player.CharacterAdded:Connect(function(newChar)
     setFlightState(false)
     if bodyVelocity then bodyVelocity:Destroy(); bodyVelocity=nil end
@@ -1721,8 +1831,8 @@ player.CharacterAdded:Connect(function(newChar)
     if Settings.tpEnabled then startTP() end
     if randomTPActive then toggleRandomTP(true) end
     if Settings.constantTpUp then toggleConstantUp(true) end
-    -- восстанавливаем атмосферу после смерти
     if Settings.winterEnabled then enableWinter() end
+    createMyBillboard()
 end)
 
 UserInputService.InputBegan:Connect(function(inp,gp)
