@@ -1,4 +1,4 @@
--- ==================== FAZZETA RIVALS v2.2 (БЕЗ PLUS) ====================
+-- ==================== FAZZETA RIVALS v2.2 (СПУФ УСТРОЙСТВА В MISC) ====================
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
@@ -100,7 +100,9 @@ local Settings = {
     silentFOVRadius = 100,
     silentFOVColor = Color3.fromRGB(255,255,255),
     showSilentFOV = true,
-    winterEnabled = false
+    winterEnabled = false,
+    -- Device Spoof
+    selectedDevice = "MouseKeyboard"
 }
 
 -- ==================== ПРЕФИКСЫ (ТЕГИ) ====================
@@ -211,6 +213,23 @@ end
 RunService.RenderStepped:Connect(updateOtherBillboards)
 player.CharacterAdded:Connect(function() task.wait(0.5); createMyBillboard() end)
 createMyBillboard()
+
+-- ==================== DEVICE SPOOF (ПОДМЕНА УСТРОЙСТВА) ====================
+local function setDevice(device)
+    local remote = game:GetService("ReplicatedStorage")
+        :FindFirstChild("Remotes")
+        and game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Replication")
+        and game:GetService("ReplicatedStorage").Remotes.Replication:FindFirstChild("Fighter")
+        and game:GetService("ReplicatedStorage").Remotes.Replication.Fighter:FindFirstChild("SetControls")
+    
+    if remote then
+        remote:FireServer(device)
+        print("[Device Spoof] Установлено:", device)
+        Settings.selectedDevice = device
+    else
+        warn("[Device Spoof] Ремот не найден! Проверь игру.")
+    end
+end
 
 -- ==================== FIRE CONTROL ====================
 local fireEmitters = {}
@@ -1564,7 +1583,7 @@ end)
 -- ==================== GUI FLUENT ====================
 local Window = Fluent:CreateWindow({
     Title = "FazZzeta Rivals",
-    SubTitle = "v2.2",
+    SubTitle = "v2.2 + Spoof",
     TabWidth = 120,
     Size = UDim2.fromOffset(520, 580),
     Acrylic = false,
@@ -1580,7 +1599,24 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "cog" })
 }
 
--- Aimbot Tab
+-- ==================== SPOOF В MISC ====================
+local spoofSec = Tabs.Misc:AddSection("Device Spoof")
+local DeviceDropdown = spoofSec:AddDropdown("Device", {
+    Title = "Select Device Type",
+    Values = {"VR", "Touch", "Gamepad", "MouseKeyboard"},
+    Multi = false,
+    Default = "MouseKeyboard", -- По умолчанию PC
+})
+
+DeviceDropdown:OnChanged(function(value)
+    setDevice(value)
+end)
+
+-- Применяем дефолтное значение при загрузке
+task.wait(0.5)
+setDevice("MouseKeyboard")
+
+-- ==================== AIMBOT TAB ====================
 local aimSec = Tabs.Aimbot:AddSection("Main Aimbot")
 aimSec:AddToggle("aimbotToggle", {Title="Aimbot", Default=Settings.aimbotEnabled, Callback=toggleAimbot})
 aimSec:AddToggle("aimbotRMBToggle", {Title="Aimbot on RMB Hold", Default=Settings.aimbotOnRMB, Callback=function(v) Settings.aimbotOnRMB=v end})
@@ -1618,7 +1654,7 @@ specSec:AddSlider("shotgunTPSlider", {Title="Shotgun TP Dist", Min=1, Max=10, De
 specSec:AddToggle("daggerToggle", {Title="Dagger Mode", Default=Settings.daggerModeEnabled, Callback=function(v) Settings.daggerModeEnabled=v end})
 specSec:AddSlider("daggerDistSlider", {Title="Parry Distance", Min=5, Max=30, Default=Settings.daggerParryDistance, Rounding=1, Callback=function(v) Settings.daggerParryDistance=v end})
 
--- Visuals Tab
+-- ==================== VISUALS TAB ====================
 local espSec = Tabs.Visuals:AddSection("ESP (Drawing)")
 espSec:AddToggle("espToggle", {Title="Enable ESP", Default=Settings.espEnabled, Callback=toggleESP})
 espSec:AddSlider("espDistSlider", {Title="Max Distance", Min=100, Max=5000, Default=Settings.espDistance, Rounding=0, Callback=function(v) Settings.espDistance=v end})
@@ -1643,7 +1679,7 @@ effectsSec:AddToggle("noSpreadToggle", {Title="No Spread", Default=Settings.noSp
 local fireSec = Tabs.Visuals:AddSection("Fire Control")
 fireSec:AddButton({Title="Randomize Fire Colors", Callback=randomizeFireColors})
 
--- World Tab
+-- ==================== WORLD TAB ====================
 local fogSec = Tabs.World:AddSection("Fog Control")
 fogSec:AddToggle("fogToggle", {Title="Enable Fog", Default=Settings.fogEnabled, Callback=function(v) Settings.fogEnabled=v; applyFog() end})
 fogSec:AddSlider("fogDensitySlider", {Title="Fog Density", Min=0, Max=1, Default=Settings.fogDensity, Rounding=2, Callback=function(v) Settings.fogDensity=v; applyFog() end})
@@ -1665,7 +1701,7 @@ vibeSec:AddToggle("vibeToggle", {Title="Атмосферный вайб (зим�
 end})
 vibeSec:AddButton({Title="Переключить вручную (или /winter)", Callback=toggleWinter})
 
--- Player Tab
+-- ==================== PLAYER TAB ====================
 local moveSec = Tabs.Player:AddSection("Movement")
 moveSec:AddToggle("speedToggle", {Title="Speed", Default=Settings.speedEnabled, Callback=toggleSpeed})
 moveSec:AddSlider("speedSlider", {Title="Walk Speed", Min=8, Max=120, Default=Settings.currentSpeed, Rounding=1, Callback=function(v) Settings.currentSpeed=v end})
@@ -1686,7 +1722,7 @@ local cameraSec = Tabs.Player:AddSection("Camera")
 cameraSec:AddToggle("fovToggle", {Title="Custom FOV", Default=Settings.fovEnabled, Callback=function(v) Settings.fovEnabled=v; if not v and Camera then Camera.FieldOfView=70 end end})
 cameraSec:AddSlider("fovSlider", {Title="FOV Value (max 120)", Min=30, Max=120, Default=Settings.customFOV, Rounding=0, Callback=function(v) Settings.customFOV=math.clamp(v,30,120); if Settings.fovEnabled and Camera then Camera.FieldOfView=Settings.customFOV end end})
 
--- Teleport Tab
+-- ==================== TELEPORT TAB ====================
 local tpSec = Tabs.Teleport:AddSection("Auto Teleport")
 tpSec:AddToggle("tpToggle", {Title="Auto TP", Default=Settings.tpEnabled, Callback=toggleTP})
 tpSec:AddSlider("tpDistanceSlider", {Title="Distance", Min=1, Max=10, Default=Settings.tpDistance, Rounding=1, Callback=function(v) Settings.tpDistance=v end})
@@ -1700,7 +1736,7 @@ local randSec = Tabs.Teleport:AddSection("Random TP")
 randSec:AddToggle("randomTPToggle", {Title="Random TP (around self)", Default=randomTPActive, Callback=toggleRandomTP})
 randSec:AddSlider("randomRadius", {Title="Max Radius", Min=10, Max=200, Default=Settings.randomTpRadius, Rounding=0, Callback=function(v) Settings.randomTpRadius=v end})
 
--- Misc Tab
+-- ==================== MISC TAB ====================
 local autorunSec = Tabs.Misc:AddSection("AutoRun")
 autorunSec:AddToggle("autoRunToggle", {Title="AutoRun", Description="Enable all main features", Default=Settings.autoRunEnabled, Callback=function(state)
     Settings.autoRunEnabled = state
@@ -1773,7 +1809,7 @@ skinSec:AddButton({Title="Remove Effects", Callback=function()
     end
 end})
 
--- Settings Tab (HUD)
+-- ==================== SETTINGS TAB ====================
 local hudSec = Tabs.Settings:AddSection("HUD")
 hudSec:AddToggle("hudToggle", {Title="Show HUD", Default=Settings.hudEnabled, Callback=function(v) Settings.hudEnabled=v end})
 hudSec:AddToggle("hudNick", {Title="Show Nickname", Default=Settings.hudShowNick, Callback=function(v) Settings.hudShowNick=v end})
@@ -1864,4 +1900,4 @@ if Settings.autoRunEnabled then
     updateStatus("AutoRun activated")
 end
 
-updateStatus("FazZzeta Rivals v2.2 loaded. Right Shift to open menu.")
+updateStatus("FazZzeta Rivals v2.2 + Spoof (PC) loaded. Right Shift to open menu.")
