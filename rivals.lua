@@ -17,7 +17,6 @@ local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 
--- ==================== НАСТРОЙКИ ====================
 local Settings = {
     speedEnabled = true,
     currentSpeed = 16,
@@ -101,34 +100,54 @@ local Settings = {
     silentFOVColor = Color3.fromRGB(255,255,255),
     showSilentFOV = true,
     winterEnabled = false,
-    -- Device Spoof
-    selectedDevice = "MouseKeyboard"
+    selectedDevice = "MouseKeyboard",
+    Ban1 = "Riot Shield",
+    Ban2 = "Katana",
+    AutoBan = false,
+    AutoLoad = false, -- <--- НОВАЯ НАСТРОЙКА
 }
 
--- ==================== ПРЕФИКСЫ (ТЕГИ) ====================
+-- ==================== АВТОЗАГРУЗКА ====================
+local function SetupAutoLoad()
+    local queue = queue_on_teleport or queueonteleport
+    if not queue then
+        print("[AutoLoad] ❌ queue_on_teleport не найден!")
+        return false
+    end
+    
+    local scriptURL = "https://raw.githubusercontent.com/a123456789tt/iddddddddddidj/refs/heads/main/rivals.lua"
+    
+    queue([[
+        print("[AutoLoad] Загрузка Rivals Script...")
+        loadstring(game:HttpGet("]] .. scriptURL .. [["))()
+        print("[AutoLoad] Готово!")
+    ]])
+    
+    print("[AutoLoad] ✅ Автозагрузка УСТАНОВЛЕНА!")
+    return true
+end
+
+-- ==================== ПРЕФИКСЫ ====================
 local MARKER_FOLDER = "FazZzeta_Prefixes"
 local markerFolder = Workspace:FindFirstChild(MARKER_FOLDER) or Instance.new("Folder")
 markerFolder.Name = MARKER_FOLDER
 markerFolder.Parent = Workspace
 
--- Свой маркер (чтобы другие видели, что ты используешь скрипт)
 local myMarker = markerFolder:FindFirstChild(player.Name) or Instance.new("StringValue")
 myMarker.Name = player.Name
 myMarker.Value = "Rivals User"
 myMarker.Parent = markerFolder
 
--- Функция получения тега другого игрока
 local function getOtherPlayerTag(plr)
     if plr == player then return "Rivals User" end
     local marker = markerFolder:FindFirstChild(plr.Name)
     if marker then
-        return marker.Value  -- "Rivals User"
+        return marker.Value
     else
         return "фрик"
     end
 end
 
--- Свой билборд (тег над головой)
 local myBillboard = nil
 local function createMyBillboard()
     if not character or not character:FindFirstChild("Head") then return end
@@ -153,7 +172,6 @@ local function createMyBillboard()
     textLabel.Parent = myBillboard
 end
 
--- Билборды других игроков с проверкой видимости через стены
 local otherBillboards = {}
 local function shouldShowBillboard(part)
     if not Camera then return true end
@@ -214,7 +232,7 @@ RunService.RenderStepped:Connect(updateOtherBillboards)
 player.CharacterAdded:Connect(function() task.wait(0.5); createMyBillboard() end)
 createMyBillboard()
 
--- ==================== DEVICE SPOOF (ПОДМЕНА УСТРОЙСТВА) ====================
+-- ==================== DEVICE SPOOF ====================
 local function setDevice(device)
     local remote = game:GetService("ReplicatedStorage")
         :FindFirstChild("Remotes")
@@ -303,7 +321,6 @@ end
 for _, plr in ipairs(Players:GetPlayers()) do if plr ~= player then onPlayerRespawn(plr) end end
 Players.PlayerAdded:Connect(onPlayerRespawn)
 
--- ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
 local function updateStatus(text) print("[FazZzeta] " .. text) end
 local function isEnemy(targetPlayer)
     if targetPlayer == player then return false end
@@ -330,7 +347,7 @@ local function canSee(targetPart)
     return true
 end
 
--- No Recoil / No Spread
+-- ==================== NO RECOIL / NO SPREAD ====================
 local function applyNoRecoilSpread()
     if not Settings.noRecoil and not Settings.noSpread then return end
     local tool = character:FindFirstChildOfClass("Tool")
@@ -350,7 +367,7 @@ local function applyNoRecoilSpread()
 end
 RunService.Heartbeat:Connect(applyNoRecoilSpread)
 
--- No Flash / No Smoke
+-- ==================== NO FLASH / NO SMOKE ====================
 local function removeFlashSmoke(obj)
     if not obj:IsA("BasePart") and not obj:IsA("ParticleEmitter") and not obj:IsA("Smoke") then return end
     local parentName = obj.Parent and obj.Parent.Name:lower() or ""
@@ -366,12 +383,12 @@ end
 Workspace.DescendantAdded:Connect(removeFlashSmoke)
 for _, v in ipairs(Workspace:GetDescendants()) do removeFlashSmoke(v) end
 
--- Custom FOV
+-- ==================== CUSTOM FOV ====================
 RunService.RenderStepped:Connect(function()
     if Settings.fovEnabled and Camera then Camera.FieldOfView = math.clamp(Settings.customFOV, 30, 120) end
 end)
 
--- Fog
+-- ==================== FOG ====================
 local function applyFog()
     if Settings.winterEnabled then return end
     if Settings.fogEnabled then
@@ -598,7 +615,6 @@ UserInputService.InputBegan:Connect(function(inp, gp)
     end
 end)
 
--- FOV Circle
 local fovCircle = nil
 RunService.RenderStepped:Connect(function()
     if Settings.showSilentFOV and Settings.silentFOVEnabled then
@@ -705,7 +721,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Slide Boost
 local function startSlideBoost()
     if not Settings.slideBoostEnabled then return end
     local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -1066,7 +1081,7 @@ end
 if Settings.espEnabled then startESP() end
 RunService.RenderStepped:Connect(updateDrawingESP)
 
--- ==================== HUD (исправлен: чёрная обводка, порядок Game -> Ping) ====================
+-- ==================== HUD ====================
 local hudObjects = {}
 local lastFpsUpdate = tick()
 local fpsCount = 0
@@ -1117,7 +1132,6 @@ RunService.RenderStepped:Connect(function()
     local screenHeight = Camera.ViewportSize.Y
     local yPos = 50
 
-    -- Ник
     if Settings.hudShowNick then
         if not hudObjects.nick then
             hudObjects.nick = Drawing.new("Text")
@@ -1131,7 +1145,6 @@ RunService.RenderStepped:Connect(function()
         yPos = yPos + 25
     elseif hudObjects.nick then hudObjects.nick.Visible = false end
 
-    -- Game (первым)
     if Settings.hudShowGame then
         if not hudObjects.game then
             hudObjects.game = Drawing.new("Text")
@@ -1145,7 +1158,6 @@ RunService.RenderStepped:Connect(function()
         yPos = yPos + 25
     elseif hudObjects.game then hudObjects.game.Visible = false end
 
-    -- Ping (вторым)
     if Settings.hudShowPing then
         if not hudObjects.ping then
             hudObjects.ping = Drawing.new("Text")
@@ -1159,7 +1171,6 @@ RunService.RenderStepped:Connect(function()
         yPos = yPos + 25
     elseif hudObjects.ping then hudObjects.ping.Visible = false end
 
-    -- FPS
     if Settings.hudShowFPS then
         if not hudObjects.fps then
             hudObjects.fps = Drawing.new("Text")
@@ -1174,7 +1185,6 @@ RunService.RenderStepped:Connect(function()
         yPos = yPos + 25
     elseif hudObjects.fps then hudObjects.fps.Visible = false end
 
-    -- Title
     if Settings.hudShowTitle then
         if not hudObjects.title then
             hudObjects.title = Drawing.new("Text")
@@ -1187,7 +1197,6 @@ RunService.RenderStepped:Connect(function()
         hudObjects.title.Text = "FazZzeta Rivals"
     elseif hudObjects.title then hudObjects.title.Visible = false end
 
-    -- Version
     if Settings.hudShowVersion then
         if not hudObjects.version then
             hudObjects.version = Drawing.new("Text")
@@ -1335,7 +1344,7 @@ local function applyWeaponSkin(wn, col, trans, mat, wrapTex, wrapMat, ref, useCo
     end
 end
 
--- ==================== АТМОСФЕРНЫЙ ВАЙБ (доступен всем) ====================
+-- ==================== АТМОСФЕРНЫЙ ВАЙБ ====================
 local snowEmitters = {}
 local winterAtmosphereObj, winterSky, winterMoon
 local nightSkyboxId = "rbxassetid://9992021469"
@@ -1580,15 +1589,101 @@ player.Chatted:Connect(function(msg)
     end
 end)
 
--- ==================== GUI FLUENT ====================
+-- ==================== BAN SYSTEM ====================
+local function FindBanRemote()
+    local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+    if remotes then
+        local replication = remotes:FindFirstChild("Replication")
+        if replication then
+            local fighter = replication:FindFirstChild("Fighter")
+            if fighter then
+                local banRemote = fighter:FindFirstChild("Ban") or 
+                                 fighter:FindFirstChild("VoteBan") or 
+                                 fighter:FindFirstChild("SelectBan") or
+                                 fighter:FindFirstChild("BanSystem")
+                if banRemote then
+                    return banRemote
+                end
+            end
+        end
+    end
+    
+    for _, child in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+        if child:IsA("RemoteEvent") or child:IsA("RemoteFunction") then
+            local name = string.lower(child.Name)
+            if string.find(name, "ban") or string.find(name, "vote") or string.find(name, "select") then
+                return child
+            end
+        end
+    end
+    return nil
+end
+
+local BanRemote = FindBanRemote()
+
+local function SendBan(weaponName)
+    if not BanRemote then return false end
+    local success = pcall(function()
+        if BanRemote:IsA("RemoteEvent") then
+            BanRemote:FireServer(weaponName)
+        elseif BanRemote:IsA("RemoteFunction") then
+            BanRemote:InvokeServer(weaponName)
+        end
+        print("[Ban] " .. weaponName)
+    end)
+    return success
+end
+
+local BanList = {
+    "Distortion", "Permafrost", "Energy Rifle", "Flamethrower", "Grenade Launcher",
+    "Minigun", "Paintball Gun", "Assault Rifle", "Bow", "Burst Rifle",
+    "Crossbow", "Gunblade", "RPG", "Shotgun", "Sniper", "Scepter",
+    "Warper", "Energy Pistols", "Exogun", "Slingshot", "Daggers",
+    "Flare Gun", "Handgun", "Revolver", "Shorty", "Spray", "Uzi", "Glass Cannon",
+    "Maul", "Spear", "Trowel", "Battle Axe", "Chainsaw", "Fists", "Katana",
+    "Knife", "Riot Shield", "Scythe", "Glast Shard",
+    "Grappler", "Medkit", "Subspace Tripmine", "Warpstone", "Flashbang",
+    "Freeze Ray", "Grenade", "Jump Pad", "Molotov", "Satchel",
+    "Smoke Grenade", "War Horn", "Elixir", "RNG Dice"
+}
+
+local function SendTwoBans()
+    if not Settings.AutoBan then return end
+    SendBan(Settings.Ban1)
+    task.wait(0.3)
+    SendBan(Settings.Ban2)
+end
+
+local banThread = nil
+local function StartBanSpam()
+    if banThread then return end
+    banThread = spawn(function()
+        while Settings.AutoBan do
+            SendTwoBans()
+            task.wait(0.5)
+        end
+    end)
+end
+
+local function StopBanSpam()
+    if banThread then
+        coroutine.close(banThread)
+        banThread = nil
+    end
+end
+
+Settings.AutoBan = false
+
+-- ==================== GUI ====================
 local Window = Fluent:CreateWindow({
     Title = "FazZzeta Rivals",
-    SubTitle = "v2.2 + Spoof",
+    SubTitle = "v2.2 + Spoof + AutoLoad",
     TabWidth = 120,
-    Size = UDim2.fromOffset(520, 580),
+    Size = UDim2.fromOffset(520, 620),
     Acrylic = false,
     MinimizeKey = Enum.KeyCode.RightShift
 })
+
 local Tabs = {
     Aimbot = Window:AddTab({ Title = "Aimbot", Icon = "crosshair" }),
     Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
@@ -1599,24 +1694,19 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "cog" })
 }
 
--- ==================== SPOOF В MISC ====================
+-- ==================== DEVICE SPOOF ====================
 local spoofSec = Tabs.Misc:AddSection("Device Spoof")
 local DeviceDropdown = spoofSec:AddDropdown("Device", {
     Title = "Select Device Type",
     Values = {"VR", "Touch", "Gamepad", "MouseKeyboard"},
     Multi = false,
-    Default = "MouseKeyboard", -- По умолчанию PC
+    Default = "MouseKeyboard",
 })
-
-DeviceDropdown:OnChanged(function(value)
-    setDevice(value)
-end)
-
--- Применяем дефолтное значение при загрузке
+DeviceDropdown:OnChanged(function(value) setDevice(value) end)
 task.wait(0.5)
 setDevice("MouseKeyboard")
 
--- ==================== AIMBOT TAB ====================
+-- ==================== AIMBOT ====================
 local aimSec = Tabs.Aimbot:AddSection("Main Aimbot")
 aimSec:AddToggle("aimbotToggle", {Title="Aimbot", Default=Settings.aimbotEnabled, Callback=toggleAimbot})
 aimSec:AddToggle("aimbotRMBToggle", {Title="Aimbot on RMB Hold", Default=Settings.aimbotOnRMB, Callback=function(v) Settings.aimbotOnRMB=v end})
@@ -1654,7 +1744,7 @@ specSec:AddSlider("shotgunTPSlider", {Title="Shotgun TP Dist", Min=1, Max=10, De
 specSec:AddToggle("daggerToggle", {Title="Dagger Mode", Default=Settings.daggerModeEnabled, Callback=function(v) Settings.daggerModeEnabled=v end})
 specSec:AddSlider("daggerDistSlider", {Title="Parry Distance", Min=5, Max=30, Default=Settings.daggerParryDistance, Rounding=1, Callback=function(v) Settings.daggerParryDistance=v end})
 
--- ==================== VISUALS TAB ====================
+-- ==================== VISUALS ====================
 local espSec = Tabs.Visuals:AddSection("ESP (Drawing)")
 espSec:AddToggle("espToggle", {Title="Enable ESP", Default=Settings.espEnabled, Callback=toggleESP})
 espSec:AddSlider("espDistSlider", {Title="Max Distance", Min=100, Max=5000, Default=Settings.espDistance, Rounding=0, Callback=function(v) Settings.espDistance=v end})
@@ -1679,7 +1769,7 @@ effectsSec:AddToggle("noSpreadToggle", {Title="No Spread", Default=Settings.noSp
 local fireSec = Tabs.Visuals:AddSection("Fire Control")
 fireSec:AddButton({Title="Randomize Fire Colors", Callback=randomizeFireColors})
 
--- ==================== WORLD TAB ====================
+-- ==================== WORLD ====================
 local fogSec = Tabs.World:AddSection("Fog Control")
 fogSec:AddToggle("fogToggle", {Title="Enable Fog", Default=Settings.fogEnabled, Callback=function(v) Settings.fogEnabled=v; applyFog() end})
 fogSec:AddSlider("fogDensitySlider", {Title="Fog Density", Min=0, Max=1, Default=Settings.fogDensity, Rounding=2, Callback=function(v) Settings.fogDensity=v; applyFog() end})
@@ -1701,7 +1791,7 @@ vibeSec:AddToggle("vibeToggle", {Title="Атмосферный вайб (зим�
 end})
 vibeSec:AddButton({Title="Переключить вручную (или /winter)", Callback=toggleWinter})
 
--- ==================== PLAYER TAB ====================
+-- ==================== PLAYER ====================
 local moveSec = Tabs.Player:AddSection("Movement")
 moveSec:AddToggle("speedToggle", {Title="Speed", Default=Settings.speedEnabled, Callback=toggleSpeed})
 moveSec:AddSlider("speedSlider", {Title="Walk Speed", Min=8, Max=120, Default=Settings.currentSpeed, Rounding=1, Callback=function(v) Settings.currentSpeed=v end})
@@ -1722,7 +1812,7 @@ local cameraSec = Tabs.Player:AddSection("Camera")
 cameraSec:AddToggle("fovToggle", {Title="Custom FOV", Default=Settings.fovEnabled, Callback=function(v) Settings.fovEnabled=v; if not v and Camera then Camera.FieldOfView=70 end end})
 cameraSec:AddSlider("fovSlider", {Title="FOV Value (max 120)", Min=30, Max=120, Default=Settings.customFOV, Rounding=0, Callback=function(v) Settings.customFOV=math.clamp(v,30,120); if Settings.fovEnabled and Camera then Camera.FieldOfView=Settings.customFOV end end})
 
--- ==================== TELEPORT TAB ====================
+-- ==================== TELEPORT ====================
 local tpSec = Tabs.Teleport:AddSection("Auto Teleport")
 tpSec:AddToggle("tpToggle", {Title="Auto TP", Default=Settings.tpEnabled, Callback=toggleTP})
 tpSec:AddSlider("tpDistanceSlider", {Title="Distance", Min=1, Max=10, Default=Settings.tpDistance, Rounding=1, Callback=function(v) Settings.tpDistance=v end})
@@ -1736,7 +1826,7 @@ local randSec = Tabs.Teleport:AddSection("Random TP")
 randSec:AddToggle("randomTPToggle", {Title="Random TP (around self)", Default=randomTPActive, Callback=toggleRandomTP})
 randSec:AddSlider("randomRadius", {Title="Max Radius", Min=10, Max=200, Default=Settings.randomTpRadius, Rounding=0, Callback=function(v) Settings.randomTpRadius=v end})
 
--- ==================== MISC TAB ====================
+-- ==================== MISC ====================
 local autorunSec = Tabs.Misc:AddSection("AutoRun")
 autorunSec:AddToggle("autoRunToggle", {Title="AutoRun", Description="Enable all main features", Default=Settings.autoRunEnabled, Callback=function(state)
     Settings.autoRunEnabled = state
@@ -1765,7 +1855,6 @@ local rpgSec = Tabs.Misc:AddSection("RPG Protection")
 rpgSec:AddToggle("rpgBlockToggle", {Title="Block RPG Zone", Default=Settings.rpgBlockEnabled, Callback=function(v) Settings.rpgBlockEnabled=v; RPG_Block.Enabled=v end})
 rpgSec:AddSlider("rpgZoneSizeSlider", {Title="Zone Size", Min=5, Max=25, Default=Settings.rpgBlockSize, Rounding=1, Callback=function(v) Settings.rpgBlockSize=v; RPG_Block.ZoneSize=v end})
 
--- Skin Changer
 local skinSec = Tabs.Misc:AddSection("Skin Changer")
 local weaponDropdown = skinSec:AddDropdown("weaponDropdown", {Title="Weapon", Values=weaponNames, Default=1})
 local wrapDropdown = skinSec:AddDropdown("wrapDropdown", {Title="Wrap Texture", Values=filteredWraps, Default=#filteredWraps>0 and 1 or nil})
@@ -1809,7 +1898,62 @@ skinSec:AddButton({Title="Remove Effects", Callback=function()
     end
 end})
 
--- ==================== SETTINGS TAB ====================
+-- ==================== AUTOMATION ====================
+local autoSec = Tabs.Player:AddSection("Automation")
+
+autoSec:AddToggle("autoBanToggle", {
+    Title = "Auto Ban",
+    Description = "Автоматически банить выбранное оружие",
+    Default = false,
+    Callback = function(v)
+        Settings.AutoBan = v
+        if v then
+            StartBanSpam()
+            print("[Auto Ban] Включен")
+        else
+            StopBanSpam()
+            print("[Auto Ban] Выключен")
+        end
+    end
+})
+
+autoSec:AddDropdown("ban1Dropdown", {
+    Title = "Ban 1",
+    Values = BanList,
+    Multi = false,
+    Default = "Riot Shield",
+    Callback = function(v)
+        Settings.Ban1 = v
+        print("[Auto Ban] Ban 1: " .. v)
+    end
+})
+
+autoSec:AddDropdown("ban2Dropdown", {
+    Title = "Ban 2",
+    Values = BanList,
+    Multi = false,
+    Default = "Katana",
+    Callback = function(v)
+        Settings.Ban2 = v
+        print("[Auto Ban] Ban 2: " .. v)
+    end
+})
+
+autoSec:AddButton({
+    Title = "Send Bans Now",
+    Callback = function()
+        SendTwoBans()
+    end
+})
+
+autoSec:AddParagraph({
+    Title = "Status",
+    Content = "Ban Remote: " .. (BanRemote and "✅ Found" or "❌ Not Found") ..
+              "\nBan 1: " .. Settings.Ban1 ..
+              "\nBan 2: " .. Settings.Ban2
+})
+
+-- ==================== SETTINGS ====================
 local hudSec = Tabs.Settings:AddSection("HUD")
 hudSec:AddToggle("hudToggle", {Title="Show HUD", Default=Settings.hudEnabled, Callback=function(v) Settings.hudEnabled=v end})
 hudSec:AddToggle("hudNick", {Title="Show Nickname", Default=Settings.hudShowNick, Callback=function(v) Settings.hudShowNick=v end})
@@ -1819,6 +1963,49 @@ hudSec:AddToggle("hudFPS", {Title="Show FPS", Default=Settings.hudShowFPS, Callb
 hudSec:AddToggle("hudTitle", {Title="Show Script Title", Default=Settings.hudShowTitle, Callback=function(v) Settings.hudShowTitle=v end})
 hudSec:AddToggle("hudVersion", {Title="Show Version", Default=Settings.hudShowVersion, Callback=function(v) Settings.hudShowVersion=v end})
 hudSec:AddDropdown("hudDevice", {Title="FPS Mode", Values={"PC", "Phone"}, Default=Settings.hudDevice, Callback=function(v) Settings.hudDevice=v end})
+
+-- ==================== AUTOLOAD (НОВЫЙ РАЗДЕЛ) ====================
+local autoLoadSec = Tabs.Settings:AddSection("AutoLoad")
+
+autoLoadSec:AddToggle("autoLoadToggle", {
+    Title = "Включить автозагрузку",
+    Description = "Скрипт будет автоматически загружаться при каждом входе в игру",
+    Default = Settings.AutoLoad,
+    Callback = function(v)
+        Settings.AutoLoad = v
+        if v then
+            local success = SetupAutoLoad()
+            if success then
+                print("[AutoLoad] ✅ Автозагрузка включена!")
+            else
+                print("[AutoLoad] ❌ Ошибка при установке автозагрузки")
+                Settings.AutoLoad = false
+            end
+        else
+            print("[AutoLoad] ❌ Автозагрузка выключена")
+            -- Здесь можно добавить код для отключения автозагрузки, если нужно
+        end
+    end
+})
+
+autoLoadSec:AddButton({
+    Title = "🔁 Установить автозагрузку сейчас",
+    Callback = function()
+        local success = SetupAutoLoad()
+        if success then
+            Settings.AutoLoad = true
+            print("[AutoLoad] ✅ Автозагрузка установлена!")
+        else
+            print("[AutoLoad] ❌ Не удалось установить автозагрузку")
+        end
+    end
+})
+
+autoLoadSec:AddParagraph({
+    Title = "Статус",
+    Content = "Функция queue_on_teleport: " .. (queue_on_teleport and "✅ Доступна" or "❌ Недоступна") ..
+              "\nАвтозагрузка: " .. (Settings.AutoLoad and "✅ Включена" or "❌ Выключена")
+})
 
 local setSec = Tabs.Settings:AddSection("General")
 setSec:AddButton({Title="Reset All Settings", Callback=function()
@@ -1849,7 +2036,6 @@ UserInputService.InputBegan:Connect(function(inp, gp)
     end
 end)
 
--- ==================== ОБРАБОТЧИК РЕСПАВНА ====================
 player.CharacterAdded:Connect(function(newChar)
     setFlightState(false)
     if bodyVelocity then bodyVelocity:Destroy(); bodyVelocity=nil end
@@ -1900,4 +2086,10 @@ if Settings.autoRunEnabled then
     updateStatus("AutoRun activated")
 end
 
-updateStatus("FazZzeta Rivals v2.2 + Spoof (PC) loaded. Right Shift to open menu.")
+-- ==================== АВТОЗАГРУЗКА ПРИ СТАРТЕ ====================
+if Settings.AutoLoad then
+    task.wait(1)
+    SetupAutoLoad()
+end
+
+updateStatus("FazZzeta Rivals v2.2 + Spoof + AutoLoad loaded. Right Shift to open menu.")
