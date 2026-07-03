@@ -104,7 +104,7 @@ local Settings = {
     Ban1 = "Riot Shield",
     Ban2 = "Katana",
     AutoBan = false,
-    AutoLoad = false, -- <--- НОВАЯ НАСТРОЙКА
+    AutoLoad = true, -- <--- ИЗМЕНЕНО: теперь включена по умолчанию
 }
 
 -- ==================== АВТОЗАГРУЗКА ====================
@@ -1964,7 +1964,7 @@ hudSec:AddToggle("hudTitle", {Title="Show Script Title", Default=Settings.hudSho
 hudSec:AddToggle("hudVersion", {Title="Show Version", Default=Settings.hudShowVersion, Callback=function(v) Settings.hudShowVersion=v end})
 hudSec:AddDropdown("hudDevice", {Title="FPS Mode", Values={"PC", "Phone"}, Default=Settings.hudDevice, Callback=function(v) Settings.hudDevice=v end})
 
--- ==================== AUTOLOAD (НОВЫЙ РАЗДЕЛ) ====================
+-- ==================== AUTOLOAD (только переключатель) ====================
 local autoLoadSec = Tabs.Settings:AddSection("AutoLoad")
 
 autoLoadSec:AddToggle("autoLoadToggle", {
@@ -1983,28 +1983,8 @@ autoLoadSec:AddToggle("autoLoadToggle", {
             end
         else
             print("[AutoLoad] ❌ Автозагрузка выключена")
-            -- Здесь можно добавить код для отключения автозагрузки, если нужно
         end
     end
-})
-
-autoLoadSec:AddButton({
-    Title = "🔁 Установить автозагрузку сейчас",
-    Callback = function()
-        local success = SetupAutoLoad()
-        if success then
-            Settings.AutoLoad = true
-            print("[AutoLoad] ✅ Автозагрузка установлена!")
-        else
-            print("[AutoLoad] ❌ Не удалось установить автозагрузку")
-        end
-    end
-})
-
-autoLoadSec:AddParagraph({
-    Title = "Статус",
-    Content = "Функция queue_on_teleport: " .. (queue_on_teleport and "✅ Доступна" or "❌ Недоступна") ..
-              "\nАвтозагрузка: " .. (Settings.AutoLoad and "✅ Включена" or "❌ Выключена")
 })
 
 local setSec = Tabs.Settings:AddSection("General")
