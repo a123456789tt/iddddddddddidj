@@ -1,4 +1,15 @@
 -- ==================== FAZZETA RIVALS v2.2 (СПУФ УСТРОЙСТВА В MISC) ====================
+-- БЛОКИРОВКА ПОВТОРНОГО ЗАПУСКА (закрывает старое окно)
+if _G.FazZzeta_Rivals_Loaded then
+    if _G.FazZzeta_Rivals_Window then
+        pcall(function() _G.FazZzeta_Rivals_Window:Destroy() end)
+        _G.FazZzeta_Rivals_Window = nil
+    end
+    print("[FazZzeta] Перезапуск: старое окно закрыто.")
+else
+    _G.FazZzeta_Rivals_Loaded = true
+end
+
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
@@ -104,7 +115,7 @@ local Settings = {
     Ban1 = "Riot Shield",
     Ban2 = "Katana",
     AutoBan = false,
-    AutoLoad = true, -- <--- ИЗМЕНЕНО: теперь включена по умолчанию
+    AutoLoad = true, -- включена по умолчанию
 }
 
 -- ==================== АВТОЗАГРУЗКА ====================
@@ -1684,6 +1695,9 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.RightShift
 })
 
+-- Сохраняем окно в глобальную переменную для закрытия при повторном запуске
+_G.FazZzeta_Rivals_Window = Window
+
 local Tabs = {
     Aimbot = Window:AddTab({ Title = "Aimbot", Icon = "crosshair" }),
     Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
@@ -2049,6 +2063,9 @@ UserInputService.InputBegan:Connect(function(inp,gp)
         removeSpeed()
         if bodyVelocity then bodyVelocity:Destroy() end
         disableWinter()
+        -- Сбрасываем глобальные флаги
+        _G.FazZzeta_Rivals_Loaded = false
+        _G.FazZzeta_Rivals_Window = nil
         updateStatus("Экстренное отключение")
         script:Destroy()
     end
